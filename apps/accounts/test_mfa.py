@@ -94,6 +94,39 @@ class MFASecurityTests(TestCase):
         )
         self.assertEqual(self.client.get(reverse("core:owner_dashboard")).status_code, 200)
 
+    def test_totp_code_from_5_minutes_ago_is_accepted_due_to_tolerance(self):
+        import time
+        from allauth.mfa import app_settings
+        owner = self.create_user("owner5min@example.com", User.Role.OWNER)
+        self.enable_totp(owner)
+
+        current_counter = int(time.time()) // app_settings.TOTP_PERIOD
+        # Code from 10 steps (5 minutes) ago is accepted
+        code_5_min_old = format_hotp_value(hotp_value(TOTP_SECRET, current_counter - 10))
+
+        response = self.begin_login(self.client, owner)
+        self.assertRedirects(response, reverse("mfa_authenticate"), fetch_redirect_response=False)
+        response = self.client.post(
+            reverse("mfa_authenticate"),
+            {"code": code_5_min_old},
+        )
+        self.assertRedirects(
+            response,
+            reverse("core:dashboard_router"),
+            fetch_redirect_response=False,
+        )
+
+        # Code from 11 steps (5.5 minutes) ago is beyond tolerance and rejected
+        code_too_old = format_hotp_value(hotp_value(TOTP_SECRET, current_counter - 11))
+        second_client = Client()
+        self.begin_login(second_client, owner)
+        response = second_client.post(
+            reverse("mfa_authenticate"),
+            {"code": code_too_old},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Incorrect code")
+
     def test_cashier_login_requires_password_and_valid_mfa_when_policy_enabled(self):
         MFAConfiguration.objects.create(pk=1, require_internal_user_mfa=True)
         cashier = self.create_user("cashier@example.com", User.Role.CASHIER)
