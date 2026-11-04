@@ -549,3 +549,293 @@ class PosTransactionTests(TestCase):
         admin_resp = self.client.get(reverse("admin:pos_sale_changelist"), {"time_period": "today"})
         self.assertEqual(admin_resp.status_code, 200)
         self.assertContains(admin_resp, "TEST-001")
+
+    def test_api_technician_slots_endpoint(self):
+        from datetime import time
+        from apps.services.models import StaffSchedule, StaffProfile
+        self.client.force_login(self.cashier)
+
+        # Missing staff_id
+        res = self.client.get(reverse("pos:api_technician_slots"))
+        self.assertEqual(res.status_code, 400)
+
+        # Working staff slots
+        today = timezone.localdate()
+        StaffSchedule.objects.update_or_create(
+            staff=self.staff,
+            day_of_week=today.weekday(),
+            defaults={
+                "is_working": True,
+                "start_time": time(9, 0),
+                "end_time": time(18, 0),
+                "lunch_start": time(12, 0),
+                "lunch_end": time(13, 0),
+            },
+        )
+        res = self.client.get(
+            reverse("pos:api_technician_slots"),
+            {"staff_id": self.staff.pk, "service_id": self.manicure.pk},
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertGreater(data["slots_count"], 0)
+        self.assertIn("09:00", [s["time"] for s in data["slots"]])
+        # 12:00 lunch slot should NOT be in available slots
+        self.assertNotIn("12:00", [s["time"] for s in data["slots"]])
+
+        # Staff off duty
+        StaffSchedule.objects.filter(staff=self.staff, day_of_week=today.weekday()).update(is_working=False)
+        res_off = self.client.get(
+            reverse("pos:api_technician_slots"),
+            {"staff_id": self.staff.pk},
+        )
+        self.assertEqual(res_off.status_code, 200)
+        data_off = res_off.json()
+        self.assertEqual(data_off["status"], "off_duty")
+
+    def test_walk_in_sale_creates_monitoring_and_time_blocks(self):
+        from datetime import time
+        from apps.monitoring.services import visible_work_items
+        from apps.services.models import StaffTimeBlock
+
+        # Process a walk-in sale with assigned staff and time
+        sale = create_sale(
+            cashier=self.cashier,
+            raw_items=[
+                {
+                    "service": self.manicure,
+                    "assigned_staff": self.staff,
+                    "service_time": time(14, 0),
+                    "quantity": 1,
+                }
+            ],
+            payment_method=Payment.Method.CASH,
+            amount_tendered=Decimal("1000.00"),
+            mark_appointment_completed=True,
+        )
+
+        # 1. Appointment was created automatically for the walk-in
+        self.assertIsNotNone(sale.appointment)
+        appt = sale.appointment
+        self.assertEqual(appt.booking_source, Appointment.BookingSource.WALK_IN)
+        self.assertEqual(appt.status, Appointment.Status.COMPLETED)
+
+        # 2. Service Monitoring entries created
+        work_items = list(visible_work_items(self.cashier).filter(appointment=appt))
+        self.assertEqual(len(work_items), 1)
+        self.assertEqual(work_items[0].service, self.manicure)
+        self.assertEqual(work_items[0].assigned_staff, self.staff)
+
+        # 3. StaffTimeBlock created automatically for the chosen technician
+        time_blocks = list(StaffTimeBlock.objects.filter(staff=self.staff, date=appt.appointment_date))
+        self.assertTrue(any(tb.start_time == time(14, 0) for tb in time_blocks))
+
+    def test_pos_context_includes_technician_skills_and_same_tab_walk_in(self):
+        self.client.force_login(self.cashier)
+        res = self.client.get(reverse("pos:index"))
+        self.assertEqual(res.status_code, 200)
+
+        # 1. Available Technicians link should open in same tab (no target="_blank")
+        self.assertContains(res, reverse("services:walk_in_technicians"))
+        self.assertNotContains(res, f'href="{reverse("services:walk_in_technicians")}" target="_blank"')
+
+        # 2. Context has staff_qualified_services and all_services_catalog
+        self.assertIn("staff_qualified_services", res.context)
+        self.assertIn("all_services_catalog", res.context)
+
+        # 3. JSON scripts are rendered in HTML
+        self.assertContains(res, 'id="staff-qualified-services-data"')
+        self.assertContains(res, 'id="all-services-catalog-data"')
+
+        # 4. Level-aligned badges and elements exist
+        self.assertContains(res, 'pos-service-status-badge')
+        self.assertContains(res, 'pos-staff-status-badge')
+        self.assertContains(res, 'pos-time-hint')
+
+        # 5. Technician skills filtering
+        self.staff.staff_profile.skills.set([self.manicure])
+        res_filtered = self.client.get(reverse("pos:index"))
+        staff_services = res_filtered.context["staff_qualified_services"]
+        self.assertIn(str(self.manicure.pk), staff_services[str(self.staff.pk)])
+        self.assertNotIn(str(self.pedicure.pk), staff_services[str(self.staff.pk)])
+
+    def test_pos_customer_modes_context_and_catalogs(self):
+        self.client.force_login(self.cashier)
+
+        # Default mode is walkin
+        res = self.client.get(reverse("pos:index"))
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context["initial_mode"], "walkin")
+        self.assertIn("customers_catalog", res.context)
+        self.assertIn("eligible_appointments", res.context)
+        self.assertContains(res, 'id="customers-catalog-data"')
+        self.assertContains(res, 'id="eligible-appointments-data"')
+        self.assertContains(res, 'id="panel-walkin"')
+        self.assertContains(res, 'id="panel-booked"')
+        self.assertContains(res, 'id="walkin-find-results-list"')
+        self.assertContains(res, 'id="walkin-ongoing-list"')
+
+        # Query param ?mode=booked
+        res_booked = self.client.get(reverse("pos:index") + "?mode=booked")
+        self.assertEqual(res_booked.status_code, 200)
+        self.assertEqual(res_booked.context["initial_mode"], "booked")
+
+    def test_walk_in_custom_customer_name_persisted(self):
+        self.client.force_login(self.cashier)
+        sale = create_sale(
+            cashier=self.cashier,
+            raw_items=[{"service": self.manicure, "quantity": 1, "assigned_staff": self.staff}],
+            payment_method=Payment.Method.CASH,
+            walk_in_customer_name="Maria Santos (Guest)",
+            walk_in_referral_number="WLK-20261029-9999",
+        )
+        self.assertEqual(sale.customer_name_snapshot, "Maria Santos (Guest) (WLK-20261029-9999)")
+        self.assertIsNone(sale.customer)
+        self.assertEqual(sale.appointment.booking_source, Appointment.BookingSource.WALK_IN)
+
+    def test_api_quick_create_customer(self):
+        from apps.customers.models import Customer
+        self.client.force_login(self.cashier)
+
+        # 1. Successful customer creation
+        res = self.client.post(
+            reverse("pos:api_quick_create_customer"),
+            {"name": "Ana Santos", "phone": "09181234567"},
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertTrue(data["created"])
+        self.assertEqual(data["customer"]["name"], "Ana Santos")
+
+        # Verify saved in database
+        cust = Customer.objects.filter(phone="09181234567").first()
+        self.assertIsNotNone(cust)
+        self.assertEqual(cust.first_name, "Ana")
+        self.assertEqual(cust.last_name, "Santos")
+
+        # 2. Duplicate phone returns existing customer without crash
+        res_dup = self.client.post(
+            reverse("pos:api_quick_create_customer"),
+            {"name": "Ana Santos", "phone": "09181234567"},
+        )
+        self.assertEqual(res_dup.status_code, 200)
+        data_dup = res_dup.json()
+        self.assertEqual(data_dup["status"], "ok")
+        self.assertFalse(data_dup["created"])
+        self.assertEqual(data_dup["customer"]["id"], cust.pk)
+
+    def test_api_add_service_to_appointment(self):
+        from datetime import date, time
+        from apps.bookings.models import AppointmentService
+        from apps.services.models import StaffTimeBlock
+
+        self.client.force_login(self.cashier)
+        today = timezone.localdate()
+
+        appt = Appointment.objects.create(
+            customer=self.customer,
+            customer_name_snapshot=self.customer.full_name,
+            customer_phone_snapshot=self.customer.phone,
+            appointment_date=today,
+            start_time=time(14, 0),
+            end_time=time(14, 30),
+            assigned_staff=self.staff,
+            status=Appointment.Status.ONGOING,
+            booking_source=Appointment.BookingSource.WALK_IN,
+        )
+        AppointmentService.objects.create(
+            appointment=appt,
+            service=self.manicure,
+            service_name=self.manicure.name,
+            duration_minutes=self.manicure.duration_minutes,
+            price=self.manicure.price,
+            assigned_staff=self.staff,
+            status=AppointmentService.Status.ONGOING,
+            position=1,
+        )
+
+        res = self.client.post(
+            reverse("pos:api_add_service_to_appointment", kwargs={"pk": appt.pk}),
+            {
+                "service_id": str(self.pedicure.pk),
+                "staff_id": str(self.staff.pk),
+                "service_time": "15:00",
+            },
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertIn("Matagumpay na naidagdag", data["message"])
+
+        # Check AppointmentService was added
+        services = list(appt.appointment_services.all().order_by("position"))
+        self.assertEqual(len(services), 2)
+        added_svc = services[1]
+        self.assertEqual(added_svc.service, self.pedicure)
+        self.assertEqual(added_svc.status, AppointmentService.Status.ONGOING)
+
+        # Check StaffTimeBlock was created for the technician
+        tbs = list(StaffTimeBlock.objects.filter(staff=self.staff, date=today, start_time=time(15, 0)))
+        self.assertEqual(len(tbs), 1)
+
+    def test_pos_add_on_sale_for_ongoing_appointment_with_prior_sale(self):
+        from datetime import time
+        from apps.bookings.models import AppointmentService
+        from apps.services.models import StaffTimeBlock
+
+        today = timezone.localdate()
+        appt = Appointment.objects.create(
+            customer=self.customer,
+            customer_name_snapshot=self.customer.full_name,
+            customer_phone_snapshot=self.customer.phone,
+            appointment_date=today,
+            start_time=time(10, 0),
+            end_time=time(10, 45),
+            assigned_staff=self.staff,
+            status=Appointment.Status.ONGOING,
+            booking_source=Appointment.BookingSource.WALK_IN,
+        )
+        AppointmentService.objects.create(
+            appointment=appt,
+            service=self.manicure,
+            service_name=self.manicure.name,
+            duration_minutes=self.manicure.duration_minutes,
+            price=self.manicure.price,
+            assigned_staff=self.staff,
+            status=AppointmentService.Status.ONGOING,
+            position=1,
+        )
+
+        # First initial sale
+        sale1 = create_sale(
+            cashier=self.cashier,
+            appointment=appt,
+            raw_items=[{"service": self.manicure, "assigned_staff": self.staff, "service_time": time(10, 0), "quantity": 1}],
+            payment_method=Payment.Method.CASH,
+            amount_tendered=Decimal("1000.00"),
+        )
+        self.assertEqual(sale1.appointment, appt)
+
+        # Second add-on sale while in ongoing session (adds pedicure)
+        sale2 = create_sale(
+            cashier=self.cashier,
+            appointment=appt,
+            raw_items=[{"service": self.pedicure, "assigned_staff": self.staff, "service_time": time(11, 0), "quantity": 1}],
+            payment_method=Payment.Method.CASH,
+            amount_tendered=Decimal("500.00"),
+        )
+        self.assertEqual(sale2.status, Sale.Status.COMPLETED)
+        # Avoids unique OneToOne constraint violation on appointment
+        self.assertIsNone(sale2.appointment)
+        self.assertEqual(sale2.customer, self.customer)
+
+        # Pedicure was appended to the appointment's services
+        services = list(appt.appointment_services.all().order_by("position"))
+        self.assertEqual(len(services), 2)
+        self.assertEqual(services[1].service, self.pedicure)
+
+        # Time block was created for the technician
+        tbs = list(StaffTimeBlock.objects.filter(staff=self.staff, date=today, start_time=time(11, 0)))
+        self.assertTrue(len(tbs) >= 1)

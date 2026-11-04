@@ -16,7 +16,7 @@
     </div>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <a class="btn btn-outline-brand" href="{% url 'services:walk_in_technicians' %}" target="_blank">
+    <a class="btn btn-outline-brand" href="{% url 'services:walk_in_technicians' %}">
       <i class="bi bi-people-fill me-1"></i> Available Technicians (Walk-In)
     </a>
     <a class="btn btn-outline-brand" href="{% url 'pos:shift_dashboard' %}"><i class="bi bi-safe me-1"></i> Till & Shifts</a>
@@ -28,92 +28,311 @@
   {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
   {% if item_formset.non_form_errors %}<div class="alert alert-danger" role="alert">{{ item_formset.non_form_errors }}</div>{% endif %}
   {{ item_formset.management_form }}
-  <div class="pos-layout">
-    <section class="content-card">
-      <div class="d-flex align-items-center justify-content-between mb-3">
-        <h3 class="h5 mb-0">Services</h3>
-        <span class="small text-muted"><i class="bi bi-info-circle me-1"></i> Services consume technician time blocks.</span>
-      </div>
-      <div class="pos-items">
-        {% for item_form in item_formset %}
-          <div class="pos-item-row">
-            <span class="pos-item-number">{{ forloop.counter }}</span>
-            <div class="row g-2 flex-grow-1 align-items-end">
-              <div class="col-md-5">
-                <label class="form-label small mb-1" for="{{ item_form.service.id_for_label }}">Service</label>
-                {{ item_form.service }}
-                {% for error in item_form.service.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-              </div>
-              <div class="col-md-4">
-                <label class="form-label small mb-1" for="{{ item_form.assigned_staff.id_for_label }}">Technician</label>
-                {{ item_form.assigned_staff }}
-                {% for error in item_form.assigned_staff.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-              </div>
-              <div class="col-md-3">
-                <label class="form-label small mb-1" for="{{ item_form.service_time.id_for_label }}">Time</label>
-                {{ item_form.service_time }}
-                {{ item_form.quantity }}
-                {% for error in item_form.service_time.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-                {% for error in item_form.quantity.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-              </div>
+  <!-- BOX 1: SERVICES & CUSTOMER / APPOINTMENT MERGED IN ONE CARD -->
+  <section class="content-card mb-3" id="pos-main-details-card">
+    <div class="row g-4 align-items-start">
+      <!-- SERVICES (Side-by-side and leveled with CUSTOMER & APPOINTMENT) -->
+      <div class="col-lg-7">
+        <div class="d-flex align-items-center justify-content-between mb-3" style="min-height: 38px;">
+          <div class="eyebrow mb-0 fw-bold fs-6" style="color: var(--deep-rose);">
+            <i class="bi bi-scissors me-2 text-primary"></i>SERVICES
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="small text-muted d-none d-sm-inline"><i class="bi bi-info-circle me-1"></i>Qualified technicians &amp; real-time slots</span>
+            <button type="button" class="btn btn-outline-secondary btn-xs py-0.5 px-2 rounded-pill" id="btn-clear-all-services" title="Reset all services to empty">
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Clear
+            </button>
+          </div>
+        </div>
+
+        <!-- Banner when an Active / Ongoing Session is loaded -->
+        <div id="pos-ongoing-session-banner" class="alert p-2.5 rounded-3 mb-2.5 align-items-center justify-content-between" style="display: none !important; background: rgba(13, 110, 253, 0.08); border: 1.5px solid #0d6efd;">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-hourglass-split fs-4 text-primary"></i>
+            <div>
+              <div class="fw-bold text-dark small" id="pos-ongoing-banner-title">Active Session in Progress</div>
+              <div class="small text-muted" id="pos-ongoing-banner-desc" style="font-size: 0.75rem;">Customer is currently in session. Use "+ Add Service" below to add treatments!</div>
             </div>
           </div>
-        {% endfor %}
-      </div>
-    </section>
+          <button type="button" class="btn btn-xs btn-outline-primary fw-semibold" id="btn-save-to-ongoing-session" style="display: none !important;">
+            <i class="bi bi-plus-circle me-1"></i> Add to Session (Pay Later)
+          </button>
+        </div>
 
-    <aside class="content-card pos-checkout">
-      <div>
-        <div class="eyebrow">CUSTOMER & APPOINTMENT</div>
-        <div class="mb-3">
-          <label class="form-label" for="{{ form.customer.id_for_label }}">{{ form.customer.label }}</label>
+        <!-- Aligned Column Header for Desktop (without the '#' number column) -->
+        <div class="pos-table-header d-none d-md-flex align-items-center px-3 py-2 mb-2 rounded-3 text-muted small fw-semibold" style="background: rgba(139, 79, 92, 0.05); border: 1px solid rgba(139, 79, 92, 0.1);">
+          <div class="row g-2 flex-grow-1 align-items-center">
+            <div class="col-md-5"><i class="bi bi-sparkles me-1 text-primary"></i>Service</div>
+            <div class="col-md-4"><i class="bi bi-person-badge me-1 text-primary"></i>Technician</div>
+            <div class="col-md-3"><i class="bi bi-clock me-1 text-primary"></i>Available Time</div>
+          </div>
+          <div style="width: 28px; flex-shrink: 0;"></div>
+        </div>
+
+        <div class="pos-items">
+          {% for item_form in item_formset %}
+            <div class="pos-item-row align-items-center {% if forloop.counter0 > 0 and not item_form.service.value and not item_form.errors %}pos-row-hidden{% endif %}"
+                 data-row-index="{{ forloop.counter0 }}"
+                 {% if forloop.counter0 > 0 and not item_form.service.value and not item_form.errors %}style="display: none;"{% endif %}>
+              <div class="row g-2 flex-grow-1 align-items-start">
+                <div class="col-md-5">
+                  <label class="form-label small mb-1 d-md-none" for="{{ item_form.service.id_for_label }}">Service</label>
+                  {{ item_form.service }}
+                  {% for error in item_form.service.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                  <div class="pos-service-status-badge small text-truncate mt-1" style="font-size: 0.72rem; min-height: 18px;"></div>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small mb-1 d-md-none" for="{{ item_form.assigned_staff.id_for_label }}">Technician</label>
+                  {{ item_form.assigned_staff }}
+                  {% for error in item_form.assigned_staff.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                  <div class="pos-staff-status-badge small text-truncate mt-1" style="font-size: 0.72rem; min-height: 18px;"></div>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small mb-1 d-md-none" for="{{ item_form.service_time.id_for_label }}">Time</label>
+                  <div class="pos-time-container">
+                    <select class="form-select pos-time-select d-none" aria-label="Available Time Slots">
+                      <option value="">-- Available Time --</option>
+                    </select>
+                    {{ item_form.service_time }}
+                    {{ item_form.quantity }}
+                    <div class="pos-time-hint small text-muted text-truncate mt-1" style="font-size: 0.72rem; min-height: 18px;"></div>
+                  </div>
+                  {% for error in item_form.service_time.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                  {% for error in item_form.quantity.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                </div>
+              </div>
+              <div class="pos-row-action ms-2" style="flex-shrink: 0;">
+                <button type="button" class="btn btn-sm btn-outline-danger border-0 p-1 pos-remove-row-btn" title="Remove service" style="border-radius: 50%;">
+                  <i class="bi bi-x-circle fs-5"></i>
+                </button>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+
+        <!-- Add Service Button -->
+        <div class="d-flex align-items-center gap-2 mt-2">
+          <button type="button" class="btn btn-outline-brand btn-sm" id="pos-add-service-btn">
+            <i class="bi bi-plus-circle me-1"></i> Add Service
+          </button>
+          <span class="small text-muted" id="pos-add-service-hint">Pindutin kung may dagdag pang serbisyo ang customer</span>
+        </div>
+      </div>
+
+      <!-- CUSTOMER & APPOINTMENT (Leveled at the top with SERVICES) -->
+      <div class="col-lg-5 ps-lg-4 border-start-lg">
+        <!-- Separate Mode Switcher (Walk-In vs Booked & Active Sessions) -->
+        <div class="d-flex align-items-center justify-content-between mb-3" style="min-height: 38px;">
+          <div class="btn-group w-100 p-1 rounded-pill" style="background: rgba(139, 79, 92, 0.08); border: 1px solid rgba(139, 79, 92, 0.16);" role="group" aria-label="Customer Mode Selector">
+            <button type="button" class="btn btn-sm customer-mode-tab active fw-bold py-1.5 rounded-pill" id="btn-tab-walkin" data-mode="walkin">
+              <i class="bi bi-person-walking me-1"></i> Walk-In Customer
+            </button>
+            <button type="button" class="btn btn-sm customer-mode-tab fw-bold py-1.5 rounded-pill" id="btn-tab-booked" data-mode="booked">
+              <i class="bi bi-calendar-check me-1"></i> Bookings &amp; Active Sessions
+              <span class="badge ms-1 rounded-pill" id="tab-booked-badge" style="background: rgba(139, 79, 92, 0.2); color: #8b4f5c;">{{ eligible_appointments|length }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Hidden inputs synced for Django Form Submission -->
+        <div class="d-none">
           {{ form.customer }}
-          {{ form.customer.errors }}
-        </div>
-
-        <div class="mb-3 p-2 rounded-2" style="background: rgba(139,79,92,0.06); border: 1px dashed var(--brand);" id="walkin-referral-box">
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <label class="form-label mb-0 fw-bold small" for="{{ form.walk_in_referral_number.id_for_label }}">
-              <i class="bi bi-hash me-1 text-brand"></i>{{ form.walk_in_referral_number.label }}
-            </label>
-            <button type="button" class="btn btn-xs btn-outline-brand" onclick="const d=new Date().toISOString().slice(0,10).replace(/-/g,''); const r=Math.floor(1000+Math.random()*9000); document.getElementById('id_walk_in_referral_number').value='WLK-'+d+'-'+r;">New Ref #</button>
-          </div>
-          {{ form.walk_in_referral_number }}
-          {% if form.walk_in_referral_number.help_text %}<div class="form-text small">{{ form.walk_in_referral_number.help_text }}</div>{% endif %}
-          {{ form.walk_in_referral_number.errors }}
-        </div>
-
-        <!-- Point of Sale Appointment Time Filter -->
-        <div class="mb-3 p-2 rounded-2" style="background: rgba(139,79,92,0.04); border: 1px solid var(--border);">
-          <div class="d-flex align-items-center justify-content-between mb-1">
-            <label class="form-label mb-0 small fw-bold" for="{{ form.appointment.id_for_label }}">
-              <i class="bi bi-clock me-1 text-primary"></i>{{ form.appointment.label }}
-            </label>
-            <span class="badge bg-light text-dark border small" id="pos-appt-count"></span>
-          </div>
-
-          <!-- Time slot filter buttons for appointments -->
-          <div class="d-flex flex-wrap gap-1 mb-2">
-            <button type="button" class="btn btn-xs btn-outline-brand appt-time-btn active" data-slot="all">All Times</button>
-            <button type="button" class="btn btn-xs btn-outline-brand appt-time-btn" data-slot="morning">Morning (9am-1pm)</button>
-            <button type="button" class="btn btn-xs btn-outline-brand appt-time-btn" data-slot="afternoon">Afternoon (1pm-5pm)</button>
-            <button type="button" class="btn btn-xs btn-outline-brand appt-time-btn" data-slot="evening">Evening (5pm-9pm)</button>
-          </div>
-          <input type="text" id="pos-appt-search" class="form-control form-control-sm mb-2" placeholder="🔍 Filter by time (e.g. 10:00, 2:00 PM) or name...">
-
           {{ form.appointment }}
-          {{ form.appointment.errors }}
+          <input type="hidden" name="walk_in_customer_name" id="id_walk_in_customer_name" value="">
+          <input type="hidden" name="pos_customer_mode" id="id_pos_customer_mode" value="{{ initial_mode|default:'walkin' }}">
         </div>
 
-        <div class="mb-3 form-check">
-          {{ form.mark_appointment_completed }}
-          <label class="form-check-label small" for="{{ form.mark_appointment_completed.id_for_label }}">{{ form.mark_appointment_completed.label }}</label>
-          {{ form.mark_appointment_completed.errors }}
+        <!-- ========================================== -->
+        <!-- 1. WALK-IN CUSTOMER PANEL                  -->
+        <!-- ========================================== -->
+        <div id="panel-walkin" class="customer-mode-panel">
+          <!-- Active Client Display Card -->
+          <div class="p-2.5 rounded-3 mb-2.5 d-flex align-items-center justify-content-between" id="walkin-active-customer-box" style="background: #ffffff; border: 1.5px solid rgba(139, 79, 92, 0.25); box-shadow: 0 2px 8px rgba(139,79,92,0.06);">
+            <div class="d-flex align-items-center gap-2.5 overflow-hidden">
+              <div class="rounded-circle d-flex align-items-center justify-content-center text-white" id="walkin-avatar-icon" style="width: 38px; height: 38px; background: linear-gradient(135deg, #8b4f5c, #a86270); flex-shrink: 0;">
+                <i class="bi bi-person-fill fs-5"></i>
+              </div>
+              <div class="overflow-hidden">
+                <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                  <span class="fw-bold text-dark text-truncate" id="walkin-display-name">Walk-in customer</span>
+                  <span id="walkin-status-badge" class="badge bg-light text-secondary border" style="font-size: 0.68rem;">Default</span>
+                </div>
+                <small class="text-muted d-block text-truncate" id="walkin-display-sub">General Walk-in Guest &bull; Quick Sale</small>
+              </div>
+            </div>
+            <button type="button" class="btn btn-xs btn-outline-secondary ms-2 flex-shrink-0" id="btn-reset-walkin-customer" style="display: none;" title="Reset to default walk-in guest">
+              <i class="bi bi-x-circle me-1"></i> Reset
+            </button>
+          </div>
+
+          <!-- Active / Ongoing Session Notification Alert -->
+          <div id="walkin-active-session-alert" class="alert alert-info p-2.5 rounded-3 mb-2.5 align-items-center justify-content-between" style="display: none !important; background: rgba(13, 110, 253, 0.08); border: 1.5px solid #0d6efd;">
+            <div>
+              <div class="fw-bold text-primary small"><i class="bi bi-hourglass-split me-1 text-warning"></i>Active Session in Progress!</div>
+              <div class="small text-muted" id="walkin-active-session-info" style="font-size: 0.75rem;">Client is currently receiving services in salon</div>
+            </div>
+            <button type="button" class="btn btn-xs btn-primary fw-semibold flex-shrink-0 ms-2" id="btn-load-walkin-session">
+              <i class="bi bi-plus-circle me-1"></i> Add Services
+            </button>
+          </div>
+
+          <!-- Walk-In Actions: Distinct Segmented Function Switcher -->
+          <div class="btn-group w-100 mb-2.5 p-1 rounded-3 bg-light border" role="group" aria-label="Walk-In Functions">
+            <button type="button" class="btn btn-xs fw-semibold walkin-subtab-btn active" data-subtab="new" id="btn-subtab-new">
+              <i class="bi bi-person-plus-fill me-1 text-brand"></i> Add Customer
+            </button>
+            <button type="button" class="btn btn-xs fw-semibold walkin-subtab-btn" data-subtab="find" id="btn-subtab-find">
+              <i class="bi bi-search me-1 text-primary"></i> Find Customer
+            </button>
+            <button type="button" class="btn btn-xs fw-semibold walkin-subtab-btn" data-subtab="ongoing" id="btn-subtab-ongoing">
+              <i class="bi bi-hourglass-split text-warning me-1"></i> Ongoing Walk-Ins (<span id="ongoing-walkin-badge-count">{{ ongoing_sessions_count|default:'0' }}</span>)
+            </button>
+          </div>
+
+          <!-- FUNCTION 1: ADD WALK-IN CUSTOMER (Simple, no phone required) -->
+          <div id="subtab-content-new" class="walkin-subtab-content p-2.5 rounded-3 border bg-white mb-2.5">
+            <label class="form-label small fw-bold mb-1 text-dark" for="walkin-new-name-input">
+              <i class="bi bi-person text-brand me-1"></i>Customer Name (Type name for walk-in):
+            </label>
+            <div class="input-group input-group-sm mb-2">
+              <span class="input-group-text bg-white border-end-0"><i class="bi bi-person text-muted"></i></span>
+              <input type="text" id="walkin-new-name-input" class="form-control border-start-0 ps-0" placeholder="Type customer name (e.g. Maria Santos)..." autocomplete="off">
+              <button type="button" class="btn btn-outline-secondary" id="btn-clear-new-name" style="display: none;"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-xs btn-brand flex-fill py-1.5 fw-semibold" id="btn-quick-save-customer" title="Save this customer into the system database">
+                <i class="bi bi-floppy2-fill me-1"></i> Save to System
+              </button>
+              <button type="button" class="btn btn-xs btn-outline-secondary flex-fill py-1.5" id="btn-use-guest-name" title="Use name on receipt only without saving to database">
+                <i class="bi bi-receipt me-1"></i> Receipt Only
+              </button>
+            </div>
+            <div id="walkin-customer-saved-status" class="small fw-semibold text-success mt-1.5 text-center" style="display: none; font-size: 0.76rem;">
+              <i class="bi bi-check-circle-fill me-1"></i>Saved in system database!
+            </div>
+          </div>
+
+          <!-- FUNCTION 2: FIND REGISTERED CUSTOMER -->
+          <div id="subtab-content-find" class="walkin-subtab-content p-2.5 rounded-3 border bg-white mb-2.5" style="display: none;">
+            <label class="form-label small fw-bold mb-1 text-dark" for="walkin-search-input">
+              <i class="bi bi-search me-1 text-primary"></i>Find Registered Customer:
+            </label>
+            <div class="input-group input-group-sm mb-2">
+              <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+              <input type="text" id="walkin-search-input" class="form-control border-start-0 ps-0" placeholder="Type customer name to search..." autocomplete="off">
+              <button type="button" class="btn btn-outline-secondary" id="btn-clear-search-input" style="display: none;"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div id="walkin-find-results-list" class="border rounded-2 p-1 bg-white" style="max-height: 200px; overflow-y: auto;">
+              <!-- Populated dynamically by JS -->
+            </div>
+          </div>
+
+          <!-- FUNCTION 3: ONGOING SESSIONS IN SALON -->
+          <div id="subtab-content-ongoing" class="walkin-subtab-content p-2.5 rounded-3 border bg-white mb-2.5" style="display: none;">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="small fw-bold text-dark"><i class="bi bi-hourglass-split text-warning me-1"></i>Customers Currently in Session</span>
+              <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small" id="ongoing-walkin-count-pill">{{ ongoing_sessions_count|default:'0' }} active</span>
+            </div>
+            <div id="walkin-ongoing-list" class="border rounded-2 p-1 bg-white" style="max-height: 220px; overflow-y: auto;">
+              <!-- Populated dynamically by JS -->
+            </div>
+          </div>
+
+          <!-- Walk-in Referral Number Tracking Box -->
+          <div class="mb-3 p-2.5 rounded-3" style="background: rgba(139,79,92,0.06); border: 1.5px dashed var(--brand);" id="walkin-referral-box">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label mb-0 fw-bold small" for="{{ form.walk_in_referral_number.id_for_label }}">
+                <i class="bi bi-hash me-1 text-brand"></i>{{ form.walk_in_referral_number.label }}
+              </label>
+              <button type="button" class="btn btn-xs btn-outline-brand" onclick="const d=new Date().toISOString().slice(0,10).replace(/-/g,''); const r=Math.floor(1000+Math.random()*9000); document.getElementById('id_walk_in_referral_number').value='WLK-'+d+'-'+r;">
+                <i class="bi bi-arrow-repeat me-1"></i>New Ref #
+              </button>
+            </div>
+            {{ form.walk_in_referral_number }}
+            {% if form.walk_in_referral_number.help_text %}<div class="form-text small mt-1">{{ form.walk_in_referral_number.help_text }}</div>{% endif %}
+            {{ form.walk_in_referral_number.errors }}
+          </div>
+
+          <!-- Real-Time Staff Status Banner -->
+          <div class="p-2.5 rounded-3 border d-flex align-items-center justify-content-between" style="background: rgba(46, 125, 50, 0.05); border-color: rgba(46, 125, 50, 0.2) !important;">
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-success text-white"><i class="bi bi-check-circle-fill me-1"></i>Walk-in Ready</span>
+              <span class="small text-muted">Real-time technician roster</span>
+            </div>
+            <a href="{% url 'services:walk_in_technicians' %}" class="btn btn-xs btn-outline-success fw-semibold">
+              Check Technicians <i class="bi bi-arrow-right"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 2. BOOKED APPOINTMENT PANEL                -->
+        <!-- ========================================== -->
+        <div id="panel-booked" class="customer-mode-panel" style="display: none;">
+          <!-- Linked Appointment Active Badge -->
+          <div id="booked-linked-banner" class="p-3 rounded-3 mb-3 border border-success" style="background: rgba(25, 135, 84, 0.08); display: none;">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <span class="badge bg-success text-white mb-1"><i class="bi bi-check2-circle me-1"></i> Appointment Linked</span>
+                <h6 class="mb-0 fw-bold text-dark" id="booked-linked-name">Customer Name</h6>
+                <div class="small text-muted mt-0.5" id="booked-linked-meta">Time &bull; Booking Ref</div>
+                <div class="small text-muted mt-0.5" id="booked-linked-services">Services</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-danger" id="btn-unlink-appointment" title="Unlink appointment">
+                <i class="bi bi-x-circle me-1"></i> Unlink
+              </button>
+            </div>
+          </div>
+
+          <!-- Booked Appointment Finder (Type Customer Name or Ref) -->
+          <div id="booked-picker-container">
+            <div class="mb-2">
+              <label class="form-label small fw-bold mb-1" for="pos-appt-search">
+                <i class="bi bi-search text-primary me-1"></i>Type Customer Name to Find Booking / Session:
+              </label>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" id="pos-appt-search" class="form-control border-start-0 ps-0" placeholder="Type customer name, phone, or appointment #..." autocomplete="off">
+                <button type="button" class="btn btn-outline-secondary" id="btn-clear-appt-search" style="display: none;"><i class="bi bi-x-lg"></i></button>
+              </div>
+            </div>
+
+            <!-- Time slot and Ongoing filter buttons -->
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 mb-2">
+              <div class="d-flex flex-wrap gap-1" id="appt-slot-btn-group">
+                <button type="button" class="btn btn-xs btn-outline-brand appt-time-btn active" data-slot="all">All</button>
+                <button type="button" class="btn btn-xs btn-outline-brand appt-time-btn" data-slot="ongoing"><i class="bi bi-hourglass-split text-warning me-1"></i>Active Sessions ({{ ongoing_sessions_count|default:'0' }})</button>
+                <button type="button" class="btn btn-xs btn-outline-brand appt-time-btn" data-slot="morning">Morning (9am-1pm)</button>
+                <button type="button" class="btn btn-xs btn-outline-brand appt-time-btn" data-slot="afternoon">Afternoon (1pm-5pm)</button>
+                <button type="button" class="btn btn-xs btn-outline-brand appt-time-btn" data-slot="evening">Evening (5pm-9pm)</button>
+              </div>
+              <span class="badge bg-light text-dark border small" id="pos-appt-count">0 available</span>
+            </div>
+
+            <!-- Scrollable Interactive Appointment Cards List -->
+            <div id="pos-booked-appointments-list" class="border rounded-3 p-2 mb-3 bg-white" style="max-height: 250px; overflow-y: auto;">
+              <!-- Dynamically populated appointment cards -->
+            </div>
+          </div>
+          </div>
+
+          <div class="mb-0 form-check">
+            {{ form.mark_appointment_completed }}
+            <label class="form-check-label small" for="{{ form.mark_appointment_completed.id_for_label }}">{{ form.mark_appointment_completed.label }}</label>
+            {{ form.mark_appointment_completed.errors }}
+          </div>
         </div>
       </div>
+  </section>
 
-      <div class="border-top pt-3">
-        <div class="eyebrow">DISCOUNT MANAGEMENT & CAPS</div>
+  <!-- BOX 2: BILLING, DISCOUNT & PAYMENT (MERGED IN ONE UNIFIED CARD LIKE THE ONE ABOVE) -->
+  <section class="content-card mb-4" id="pos-billing-details-card">
+    <div class="row g-4 align-items-start">
+      <!-- DISCOUNT MANAGEMENT & CAPS -->
+      <div class="col-lg-5 col-md-12">
+        <div class="eyebrow mb-3 fw-bold fs-6" style="color: var(--deep-rose);">
+          <i class="bi bi-tag-fill me-2 text-primary"></i>DISCOUNT MANAGEMENT &amp; CAPS
+        </div>
         <div class="mb-3">
           <label class="form-label" for="{{ form.discount_type.id_for_label }}">Discount Scheme</label>
           {{ form.discount_type }}
@@ -154,8 +373,11 @@
         </div>
       </div>
 
-      <div class="border-top pt-3">
-        <div class="eyebrow">PAYMENT METHOD</div>
+      <!-- PAYMENT METHOD & TOTAL -->
+      <div class="col-lg-7 col-md-12 ps-lg-4 border-start-lg">
+        <div class="eyebrow mb-3 fw-bold fs-6" style="color: var(--deep-rose);">
+          <i class="bi bi-wallet2 me-2 text-primary"></i>PAYMENT METHOD &amp; TOTAL
+        </div>
 
         <!-- Segmented Payment Method Switcher -->
         <div class="btn-group w-100 mb-3" role="group" id="payment-method-selector">
@@ -255,35 +477,52 @@
         {% for error in form.payment_reference.errors %}
           <div class="text-danger small mb-2">{{ error }}</div>
         {% endfor %}
-      </div>
 
-      <div class="border-top pt-3">
-        <div class="d-flex justify-content-between mb-1 small text-muted">
-          <span>Subtotal:</span>
-          <strong id="pos-subtotal" class="text-dark">₱0.00</strong>
+        <div class="border-top pt-3">
+          <div class="d-flex justify-content-between mb-1 small text-muted">
+            <span>Subtotal:</span>
+            <strong id="pos-subtotal" class="text-dark">₱0.00</strong>
+          </div>
+          <div class="d-flex justify-content-between mb-1 small text-muted">
+            <span>Discount Applied:</span>
+            <strong id="pos-discount" class="text-danger">-₱0.00</strong>
+          </div>
+          <div class="pos-total mt-2">
+            <span>Final Total</span>
+            <strong id="pos-total">₱0.00</strong>
+          </div>
         </div>
-        <div class="d-flex justify-content-between mb-1 small text-muted">
-          <span>Discount Applied:</span>
-          <strong id="pos-discount" class="text-danger">-₱0.00</strong>
-        </div>
-        <div class="pos-total mt-2">
-          <span>Final Total</span>
-          <strong id="pos-total">₱0.00</strong>
-        </div>
-      </div>
 
-      <button class="btn btn-brand btn-lg w-100 mt-3" type="submit" id="btn-complete-sale">
-        <i class="bi bi-check2-circle me-1"></i> Complete Sale (Cash)
-      </button>
-    </aside>
-  </div>
+        <button class="btn btn-brand btn-lg w-100 mt-3" type="submit" id="btn-complete-sale">
+          <i class="bi bi-check2-circle me-1"></i> Complete Sale (Cash)
+        </button>
+      </div>
+    </div>
+  </section>
 </form>
 
 {{ service_prices|json_script:"service-prices" }}
+{{ service_qualified_staff|json_script:"service-qualified-staff-data" }}
+{{ staff_qualified_services|json_script:"staff-qualified-services-data" }}
+{{ all_staff_options|json_script:"all-staff-options-data" }}
+{{ all_services_catalog|json_script:"all-services-catalog-data" }}
+{{ customers_catalog|json_script:"customers-catalog-data" }}
+{{ eligible_appointments|json_script:"eligible-appointments-data" }}
+<input type="hidden" id="initial-pos-mode" value="{{ initial_mode|default:'walkin' }}">
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const servicePrices = JSON.parse(document.getElementById("service-prices").textContent);
+  const servicePrices = JSON.parse(document.getElementById("service-prices")?.textContent || "{}");
+  const qualifiedStaffMap = JSON.parse(document.getElementById("service-qualified-staff-data")?.textContent || "{}");
+  const staffQualifiedServices = JSON.parse(document.getElementById("staff-qualified-services-data")?.textContent || "{}");
+  const allStaffOptions = JSON.parse(document.getElementById("all-staff-options-data")?.textContent || "[]");
+  const allServicesCatalog = JSON.parse(document.getElementById("all-services-catalog-data")?.textContent || "[]");
+  const allServicesMap = {};
+  (allServicesCatalog || []).forEach(cat => {
+    (cat.services || []).forEach(svc => {
+      allServicesMap[String(svc.id)] = svc;
+    });
+  });
   const subtotalElem = document.getElementById("pos-subtotal");
   const discountElem = document.getElementById("pos-discount");
   const totalElem = document.getElementById("pos-total");
@@ -319,6 +558,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function calculate() {
     let subtotal = 0;
     document.querySelectorAll(".pos-item-row").forEach(function (row) {
+      if (row.style.display === "none") return;
       const service = row.querySelector(".pos-service");
       const quantity = row.querySelector('input[name$="-quantity"]');
       const qty = Number(quantity ? quantity.value : 1) || 1;
@@ -533,88 +773,617 @@ document.addEventListener("DOMContentLoaded", function () {
     amountTenderedInput.addEventListener("input", calculate);
   }
 
-  // --- Point of Sale Appointment Time Filter ---
-  const apptSelect = document.getElementById("id_appointment");
-  const apptSearch = document.getElementById("pos-appt-search");
-  const apptTimeBtns = document.querySelectorAll(".appt-time-btn");
-  const apptCountBadge = document.getElementById("pos-appt-count");
+  // -------------------------------------------------------------------------
+  // Separate Walk-In vs Booked Customer Management
+  // -------------------------------------------------------------------------
+  const customersCatalog = JSON.parse(document.getElementById("customers-catalog-data")?.textContent || "[]");
+  const eligibleAppointments = JSON.parse(document.getElementById("eligible-appointments-data")?.textContent || "[]");
+  const initialMode = document.getElementById("initial-pos-mode")?.value || "walkin";
 
-  let allApptOptions = [];
-  if (apptSelect) {
-    Array.from(apptSelect.options).forEach(opt => {
-      allApptOptions.push({
-        value: opt.value,
-        text: opt.text,
-        selected: opt.selected
-      });
+  const tabWalkin = document.getElementById("btn-tab-walkin");
+  const tabBooked = document.getElementById("btn-tab-booked");
+  const panelWalkin = document.getElementById("panel-walkin");
+  const panelBooked = document.getElementById("panel-booked");
+  const modeInput = document.getElementById("id_pos_customer_mode");
+  const custSelect = document.getElementById("id_customer");
+  const apptSelect = document.getElementById("id_appointment");
+
+  // --- Walk-In UI Elements ---
+  const walkinNameEl = document.getElementById("walkin-display-name");
+  const walkinSubEl = document.getElementById("walkin-display-sub");
+  const walkinStatusBadge = document.getElementById("walkin-status-badge");
+  const btnResetWalkin = document.getElementById("btn-reset-walkin-customer");
+  const customNameInput = document.getElementById("id_walk_in_customer_name");
+
+  // Subtab buttons & contents
+  const subtabBtns = document.querySelectorAll(".walkin-subtab-btn");
+  const subtabContentNew = document.getElementById("subtab-content-new");
+  const subtabContentFind = document.getElementById("subtab-content-find");
+  const subtabContentOngoing = document.getElementById("subtab-content-ongoing");
+
+  // Function 1: Add Customer elements
+  const newNameInput = document.getElementById("walkin-new-name-input");
+  const btnClearNewName = document.getElementById("btn-clear-new-name");
+  const btnQuickSave = document.getElementById("btn-quick-save-customer");
+  const btnUseGuestName = document.getElementById("btn-use-guest-name");
+  const savedStatus = document.getElementById("walkin-customer-saved-status");
+
+  // Function 2: Find Customer elements
+  const searchInput = document.getElementById("walkin-search-input");
+  const btnClearSearch = document.getElementById("btn-clear-search-input");
+  const findResultsList = document.getElementById("walkin-find-results-list");
+
+  // Function 3: Ongoing Sessions elements
+  const ongoingWalkinList = document.getElementById("walkin-ongoing-list");
+  const ongoingBadgeCount = document.getElementById("ongoing-walkin-badge-count");
+  const ongoingCountPill = document.getElementById("ongoing-walkin-count-pill");
+
+  // Active Session Alert in Walk-In
+  const activeSessionAlert = document.getElementById("walkin-active-session-alert");
+  const activeSessionInfo = document.getElementById("walkin-active-session-info");
+  const btnLoadWalkinSession = document.getElementById("btn-load-walkin-session");
+
+  // Ongoing session banner elements in Services card
+  const ongoingBanner = document.getElementById("pos-ongoing-session-banner");
+  const ongoingBannerTitle = document.getElementById("pos-ongoing-banner-title");
+  const ongoingBannerDesc = document.getElementById("pos-ongoing-banner-desc");
+  const btnSaveToOngoing = document.getElementById("btn-save-to-ongoing-session");
+
+  let currentLoadedAppointment = null;
+  let currentActiveSessionId = null;
+
+  function getCsrfToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value || "";
+  }
+
+  // Clear / Reset all service rows back to a single blank row
+  function clearServiceRows() {
+    const rows = document.querySelectorAll(".pos-item-row");
+    rows.forEach((row, index) => {
+      row.dataset.existingService = "0";
+      const serviceSelect = row.querySelector(".pos-service");
+      const staffSelect = row.querySelector('select[name$="-assigned_staff"]');
+      const rawTimeInput = row.querySelector('input[name$="-service_time"]');
+      const timeSelect = row.querySelector(".pos-time-select");
+      const timeHint = row.querySelector(".pos-time-hint");
+      const badgeEl = row.querySelector(".pos-staff-status-badge");
+      const serviceBadge = row.querySelector(".pos-service-status-badge");
+      const qtyInput = row.querySelector('input[name$="-quantity"]');
+
+      if (staffSelect) staffSelect.value = "";
+      if (serviceSelect) {
+        updateQualifiedServices(row, "");
+        serviceSelect.value = "";
+      }
+      updateQualifiedTechnicians(row, "");
+      updateServiceBadge(row);
+
+      if (rawTimeInput) rawTimeInput.value = "";
+      if (timeSelect) {
+        timeSelect.innerHTML = '<option value="">--:-- --</option>';
+        timeSelect.classList.add("d-none");
+        timeSelect.style.display = "none";
+      }
+      if (rawTimeInput) rawTimeInput.style.display = "";
+      if (timeHint) timeHint.innerHTML = "";
+      if (badgeEl) badgeEl.innerHTML = "";
+      if (serviceBadge) serviceBadge.innerHTML = "";
+      if (qtyInput) qtyInput.value = "1";
+
+      if (index === 0) {
+        row.style.display = "flex";
+        row.classList.remove("pos-row-hidden");
+      } else {
+        row.style.display = "none";
+        row.classList.add("pos-row-hidden");
+      }
     });
 
-    function filterAppointments() {
-      const activeBtn = document.querySelector(".appt-time-btn.active");
-      const slot = activeBtn ? activeBtn.dataset.slot : "all";
-      const q = (apptSearch ? apptSearch.value : "").trim().toLowerCase();
+    currentLoadedAppointment = null;
+    currentActiveSessionId = null;
+    if (apptSelect) apptSelect.value = "";
+    if (ongoingBanner) ongoingBanner.style.setProperty("display", "none", "important");
+    if (btnSaveToOngoing) btnSaveToOngoing.style.setProperty("display", "none", "important");
 
-      const currentSelectedVal = apptSelect.value;
-      apptSelect.innerHTML = "";
+    checkAddButtonState();
+    calculate();
+  }
 
-      let visibleCount = 0;
-      allApptOptions.forEach(item => {
-        if (!item.value) {
-          // Empty default label "No linked appointment"
-          const opt = document.createElement("option");
-          opt.value = item.value;
-          opt.textContent = item.text;
-          apptSelect.appendChild(opt);
-          return;
-        }
+  const btnClearAllServices = document.getElementById("btn-clear-all-services");
+  if (btnClearAllServices) {
+    btnClearAllServices.addEventListener("click", clearServiceRows);
+  }
 
-        const textLower = item.text.toLowerCase();
-        let matchesSlot = true;
-        if (slot !== "all") {
-          // Match time in label like "[09:30 AM]" or "[02:00 PM]"
-          const timeMatch = item.text.match(/\[(\d{1,2}):(\d{2})\s*(AM|PM)\]/i);
-          if (timeMatch) {
-            let hour = parseInt(timeMatch[1], 10);
-            const isPM = timeMatch[3].toUpperCase() === "PM";
-            if (isPM && hour !== 12) hour += 12;
-            if (!isPM && hour === 12) hour = 0;
+  // --- Subtab Navigation Switcher ---
+  function setWalkinSubtab(subtab) {
+    subtabBtns.forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.subtab === subtab);
+      btn.classList.toggle("btn-brand", btn.dataset.subtab === subtab);
+      btn.classList.toggle("btn-light", btn.dataset.subtab !== subtab);
+    });
 
-            if (slot === "morning" && (hour < 9 || hour >= 13)) matchesSlot = false;
-            if (slot === "afternoon" && (hour < 13 || hour >= 17)) matchesSlot = false;
-            if (slot === "evening" && (hour < 17 || hour >= 22)) matchesSlot = false;
-          }
-        }
-
-        const matchesQuery = !q || textLower.includes(q);
-
-        if (matchesSlot && matchesQuery) {
-          const opt = document.createElement("option");
-          opt.value = item.value;
-          opt.textContent = item.text;
-          if (item.value === currentSelectedVal) opt.selected = true;
-          apptSelect.appendChild(opt);
-          visibleCount++;
-        }
-      });
-
-      if (apptCountBadge) {
-        apptCountBadge.textContent = `${visibleCount} available`;
+    if (subtabContentNew) {
+      subtabContentNew.style.display = subtab === "new" ? "block" : "none";
+      if (subtab === "new" && (currentLoadedAppointment || currentActiveSessionId)) {
+        clearServiceRows();
+        selectCustomer(null);
       }
     }
+    if (subtabContentFind) {
+      subtabContentFind.style.display = subtab === "find" ? "block" : "none";
+      if (subtab === "find") {
+        renderCustomerFindList(searchInput ? searchInput.value : "");
+        searchInput?.focus();
+      }
+    }
+    if (subtabContentOngoing) {
+      subtabContentOngoing.style.display = subtab === "ongoing" ? "block" : "none";
+      if (subtab === "ongoing") renderOngoingWalkInsList();
+    }
+  }
 
-    apptTimeBtns.forEach(btn => {
-      btn.addEventListener("click", function () {
-        apptTimeBtns.forEach(b => b.classList.remove("active", "btn-brand"));
-        this.classList.add("active", "btn-brand");
-        filterAppointments();
-      });
+  subtabBtns.forEach(btn => {
+    btn.addEventListener("click", function() {
+      setWalkinSubtab(this.dataset.subtab);
     });
+  });
 
-    if (apptSearch) {
-      apptSearch.addEventListener("input", filterAppointments);
+  // Mode Switcher Function (Walk-In vs Booked)
+  function setCustomerMode(mode, clearServicesOnSwitch = false) {
+    if (modeInput) modeInput.value = mode;
+
+    if (mode === "walkin") {
+      tabWalkin?.classList.add("active");
+      tabBooked?.classList.remove("active");
+      if (panelWalkin) panelWalkin.style.display = "block";
+      if (panelBooked) panelBooked.style.display = "none";
+
+      if (clearServicesOnSwitch) {
+        clearServiceRows();
+      } else if (!currentLoadedAppointment || !currentLoadedAppointment.is_ongoing) {
+        if (apptSelect) apptSelect.value = "";
+        if (ongoingBanner) ongoingBanner.style.setProperty("display", "none", "important");
+        if (btnSaveToOngoing) btnSaveToOngoing.style.setProperty("display", "none", "important");
+      }
+    } else {
+      tabBooked?.classList.add("active");
+      tabWalkin?.classList.remove("active");
+      if (panelWalkin) panelWalkin.style.display = "none";
+      if (panelBooked) panelBooked.style.display = "block";
+
+      renderBookedAppointments();
+    }
+  }
+
+  tabWalkin?.addEventListener("click", () => setCustomerMode("walkin", true));
+  tabBooked?.addEventListener("click", () => setCustomerMode("booked", false));
+
+  // Select registered customer
+  function selectCustomer(cust) {
+    if (!cust || !cust.id) {
+      if (custSelect) custSelect.value = "";
+      if (customNameInput) customNameInput.value = "";
+      if (newNameInput) newNameInput.value = "";
+      if (walkinNameEl) walkinNameEl.textContent = "Walk-in customer";
+      if (walkinSubEl) walkinSubEl.textContent = "General Walk-in Guest \u2022 Quick Sale";
+      if (walkinStatusBadge) {
+        walkinStatusBadge.textContent = "Default";
+        walkinStatusBadge.className = "badge bg-light text-secondary border";
+      }
+      if (btnResetWalkin) btnResetWalkin.style.display = "none";
+      if (savedStatus) savedStatus.style.display = "none";
+      if (activeSessionAlert) activeSessionAlert.style.setProperty("display", "none", "important");
+      currentActiveSessionId = null;
+      clearServiceRows();
+    } else {
+      if (custSelect) custSelect.value = cust.id;
+      if (customNameInput) customNameInput.value = "";
+      if (newNameInput) newNameInput.value = cust.name;
+      if (walkinNameEl) walkinNameEl.textContent = cust.name;
+      if (walkinStatusBadge) {
+        walkinStatusBadge.textContent = "Registered";
+        walkinStatusBadge.className = "badge bg-success-subtle text-success border border-success-subtle";
+      }
+      const details = [];
+      if (cust.phone) details.push(`📞 ${cust.phone}`);
+      if (cust.email) details.push(`✉ ${cust.email}`);
+      if (walkinSubEl) walkinSubEl.textContent = details.join(" · ") || "Registered Customer";
+      if (btnResetWalkin) btnResetWalkin.style.display = "inline-block";
+
+      if (cust.active_session) {
+        currentActiveSessionId = cust.active_session.id;
+        if (activeSessionInfo) {
+          activeSessionInfo.textContent = `Active Session #${cust.active_session.ref} (${cust.active_session.time}) with ${cust.active_session.staff || 'Staff'} • Services: ${cust.active_session.services}`;
+        }
+        if (activeSessionAlert) activeSessionAlert.style.setProperty("display", "flex", "important");
+      } else {
+        currentActiveSessionId = null;
+        if (activeSessionAlert) activeSessionAlert.style.setProperty("display", "none", "important");
+      }
+    }
+  }
+
+  // Select custom guest name (receipt snapshot only)
+  function selectCustomGuestName(name) {
+    const trimmed = (name || "").trim();
+    if (!trimmed) {
+      selectCustomer(null);
+      return;
+    }
+    if (currentLoadedAppointment) {
+      clearServiceRows();
+    }
+    if (custSelect) custSelect.value = "";
+    if (customNameInput) customNameInput.value = trimmed;
+    if (newNameInput) newNameInput.value = trimmed;
+    if (walkinNameEl) walkinNameEl.textContent = trimmed;
+    if (walkinSubEl) walkinSubEl.textContent = "Walk-in Guest \u2022 On Receipt Only";
+    if (walkinStatusBadge) {
+      walkinStatusBadge.textContent = "Guest Name";
+      walkinStatusBadge.className = "badge bg-secondary text-white";
+    }
+    if (btnResetWalkin) btnResetWalkin.style.display = "inline-block";
+    if (activeSessionAlert) activeSessionAlert.style.setProperty("display", "none", "important");
+    currentActiveSessionId = null;
+  }
+
+  // Quick-save customer to system database via AJAX (Name only, phone excluded)
+  async function performQuickSaveCustomer() {
+    const rawName = (newNameInput ? newNameInput.value : "").trim();
+    if (!rawName) {
+      alert("Paki-type ang pangalan ng customer bago i-save.");
+      newNameInput?.focus();
+      return;
     }
 
-    filterAppointments();
+    if (btnQuickSave) {
+      btnQuickSave.disabled = true;
+      btnQuickSave.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Saving...`;
+    }
+
+    try {
+      const resp = await fetch("/pos/api/customer/quick-create/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify({ name: rawName, phone: "" }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.status !== "ok") {
+        throw new Error(data.message || "Failed to save customer");
+      }
+
+      // Add to local catalog if not present
+      const existingIdx = customersCatalog.findIndex(c => String(c.id) === String(data.customer.id));
+      if (existingIdx >= 0) {
+        customersCatalog[existingIdx] = data.customer;
+      } else {
+        customersCatalog.unshift(data.customer);
+      }
+
+      // Select the newly registered customer
+      if (currentLoadedAppointment) {
+        clearServiceRows();
+      }
+      selectCustomer(data.customer);
+
+      if (savedStatus) {
+        savedStatus.style.display = "block";
+        savedStatus.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i>Saved in system database!`;
+      }
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      if (btnQuickSave) {
+        btnQuickSave.disabled = false;
+        btnQuickSave.innerHTML = `<i class="bi bi-floppy2-fill me-1"></i> Save to System`;
+      }
+    }
+  }
+
+  // Bind Function 1: Add Customer
+  btnQuickSave?.addEventListener("click", performQuickSaveCustomer);
+  btnUseGuestName?.addEventListener("click", () => {
+    const val = newNameInput ? newNameInput.value.trim() : "";
+    if (!val) {
+      alert("Paki-type muna ang pangalan ng walk-in guest.");
+      newNameInput?.focus();
+      return;
+    }
+    selectCustomGuestName(val);
+    if (savedStatus) {
+      savedStatus.style.display = "block";
+      savedStatus.className = "small fw-semibold text-secondary mt-1.5 text-center";
+      savedStatus.innerHTML = `<i class="bi bi-receipt me-1"></i>Applied as walk-in guest on receipt.`;
+    }
+  });
+
+  newNameInput?.addEventListener("input", function() {
+    if (btnClearNewName) btnClearNewName.style.display = this.value ? "inline-block" : "none";
+    if (customNameInput) customNameInput.value = this.value;
+    if (savedStatus) savedStatus.style.display = "none";
+  });
+
+  btnClearNewName?.addEventListener("click", function() {
+    if (newNameInput) newNameInput.value = "";
+    this.style.display = "none";
+    selectCustomer(null);
+  });
+
+  btnResetWalkin?.addEventListener("click", function() {
+    selectCustomer(null);
+  });
+
+  // Bind Function 2: Find Registered Customer
+  function renderCustomerFindList(query) {
+    if (!findResultsList) return;
+    const q = (query || "").trim().toLowerCase();
+    findResultsList.innerHTML = "";
+
+    const matches = customersCatalog.filter(c => {
+      return (
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        (c.phone && c.phone.toLowerCase().includes(q))
+      );
+    });
+
+    if (matches.length === 0) {
+      findResultsList.innerHTML = `
+        <div class="text-center py-3 text-muted small">
+          <i class="bi bi-person-x fs-5 d-block mb-1 text-secondary"></i>
+          Walang nahanap na customer para sa "${query}".
+        </div>
+      `;
+      return;
+    }
+
+    matches.slice(0, 15).forEach(c => {
+      const item = document.createElement("div");
+      item.className = "p-2 border-bottom d-flex align-items-center justify-content-between";
+      const hasSession = !!c.active_session;
+
+      item.innerHTML = `
+        <div class="overflow-hidden me-2">
+          <div class="fw-bold text-dark text-truncate">
+            <i class="bi bi-person-check text-primary me-1"></i>${c.name}
+            ${hasSession ? '<span class="badge bg-warning text-dark ms-1.5 font-monospace" style="font-size:0.68rem;"><i class="bi bi-hourglass-split me-1"></i>In Session Now</span>' : ''}
+          </div>
+          <small class="text-muted d-block text-truncate">${c.phone ? '📞 ' + c.phone : (hasSession ? 'Ref #' + c.active_session.ref : 'Registered Customer')}</small>
+        </div>
+        <button type="button" class="btn btn-xs ${hasSession ? 'btn-warning fw-semibold' : 'btn-outline-primary'} flex-shrink-0">
+          ${hasSession ? '<i class="bi bi-plus-circle me-1"></i>View Session' : 'Select'}
+        </button>
+      `;
+
+      item.addEventListener("click", () => {
+        clearServiceRows();
+        selectCustomer(c);
+        if (hasSession) {
+          loadAppointment(c.active_session.id);
+        }
+      });
+      findResultsList.appendChild(item);
+    });
+  }
+
+  searchInput?.addEventListener("input", function() {
+    if (btnClearSearch) btnClearSearch.style.display = this.value ? "inline-block" : "none";
+    renderCustomerFindList(this.value);
+  });
+
+  btnClearSearch?.addEventListener("click", function() {
+    if (searchInput) searchInput.value = "";
+    this.style.display = "none";
+    renderCustomerFindList("");
+  });
+
+  // Bind Function 3: Ongoing Sessions List
+  function renderOngoingWalkInsList() {
+    if (!ongoingWalkinList) return;
+    ongoingWalkinList.innerHTML = "";
+
+    const ongoingAppts = eligibleAppointments.filter(a => a.is_ongoing === true || a.slot === "ongoing");
+
+    if (ongoingBadgeCount) ongoingBadgeCount.textContent = ongoingAppts.length;
+    if (ongoingCountPill) ongoingCountPill.textContent = `${ongoingAppts.length} active`;
+
+    if (ongoingAppts.length === 0) {
+      ongoingWalkinList.innerHTML = `
+        <div class="text-center py-4 text-muted small">
+          <i class="bi bi-check2-circle fs-4 text-success d-block mb-1"></i>
+          Walang ongoing session sa salon sa ngayon.
+        </div>
+      `;
+      return;
+    }
+
+    ongoingAppts.forEach(appt => {
+      const card = document.createElement("div");
+      card.className = "p-2 border rounded-2 mb-2 bg-white d-flex align-items-center justify-content-between";
+      card.style.cursor = "pointer";
+      card.innerHTML = `
+        <div class="overflow-hidden me-2">
+          <div class="fw-bold text-dark text-truncate">
+            <i class="bi bi-person-fill text-primary me-1"></i>${appt.customer_name}
+            <span class="badge bg-warning text-dark ms-1 font-monospace" style="font-size:0.65rem;">ONGOING</span>
+          </div>
+          <div class="small text-muted font-monospace"><i class="bi bi-clock me-1 text-warning"></i>${appt.time_display} • Tech: ${appt.staff_name}</div>
+          <div class="small text-muted text-truncate" style="max-width: 200px;"><i class="bi bi-scissors me-1 text-muted"></i>${appt.services_summary}</div>
+        </div>
+        <button type="button" class="btn btn-xs btn-primary fw-semibold flex-shrink-0">
+          <i class="bi bi-plus-circle me-1"></i> Add Services
+        </button>
+      `;
+
+      card.addEventListener("click", () => {
+        selectAppointment(appt);
+      });
+      ongoingWalkinList.appendChild(card);
+    });
+  }
+
+  // Load walkin active session button in alert
+  btnLoadWalkinSession?.addEventListener("click", function() {
+    if (!currentActiveSessionId) return;
+    const found = eligibleAppointments.find(a => String(a.id) === String(currentActiveSessionId));
+    if (found) {
+      selectAppointment(found);
+    } else {
+      loadAppointment(currentActiveSessionId);
+    }
+  });
+
+  // --- Booked: Interactive Appointments Finder ---
+  const apptListEl = document.getElementById("pos-booked-appointments-list");
+  const apptSearchInput = document.getElementById("pos-appt-search");
+  const apptClearBtn = document.getElementById("btn-clear-appt-search");
+  const apptSlotBtns = document.querySelectorAll(".appt-time-btn");
+  const apptCountBadge = document.getElementById("pos-appt-count");
+  const tabBookedBadge = document.getElementById("tab-booked-badge");
+  const bookedLinkedBanner = document.getElementById("booked-linked-banner");
+  const bookedPickerContainer = document.getElementById("booked-picker-container");
+  const linkedNameEl = document.getElementById("booked-linked-name");
+  const linkedMetaEl = document.getElementById("booked-linked-meta");
+  const linkedServicesEl = document.getElementById("booked-linked-services");
+  const btnUnlinkAppt = document.getElementById("btn-unlink-appointment");
+
+  if (tabBookedBadge) {
+    tabBookedBadge.textContent = eligibleAppointments.length;
+  }
+
+  function isTimeInSlot(timeStr, slot) {
+    if (!timeStr) return false;
+    const hour = parseInt(timeStr.split(":")[0], 10);
+    if (slot === "morning") return hour >= 9 && hour < 13;
+    if (slot === "afternoon") return hour >= 13 && hour < 17;
+    if (slot === "evening") return hour >= 17 && hour < 22;
+    return false;
+  }
+
+  function renderBookedAppointments() {
+    if (!apptListEl) return;
+    const activeBtn = document.querySelector(".appt-time-btn.active");
+    const slot = activeBtn ? activeBtn.dataset.slot : "all";
+    const q = (apptSearchInput ? apptSearchInput.value : "").trim().toLowerCase();
+
+    apptListEl.innerHTML = "";
+    let visibleCount = 0;
+
+    const filtered = eligibleAppointments.filter(appt => {
+      let matchesSlot = true;
+      if (slot === "ongoing") {
+        matchesSlot = appt.is_ongoing === true || appt.slot === "ongoing";
+      } else if (slot !== "all") {
+        matchesSlot = (appt.slot === slot) || (appt.time_raw && isTimeInSlot(appt.time_raw, slot));
+      }
+      const matchesQuery = !q || (
+        appt.customer_name.toLowerCase().includes(q) ||
+        (appt.customer_phone && appt.customer_phone.toLowerCase().includes(q)) ||
+        appt.ref.toLowerCase().includes(q) ||
+        appt.services_summary.toLowerCase().includes(q)
+      );
+      return matchesSlot && matchesQuery;
+    });
+
+    if (filtered.length === 0) {
+      apptListEl.innerHTML = `
+        <div class="text-center py-4 text-muted small">
+          <i class="bi bi-calendar-x fs-4 d-block mb-1 text-secondary"></i>
+          Walang nahanap na appointment para sa paghahanap na ito.
+        </div>
+      `;
+    } else {
+      filtered.forEach(appt => {
+        visibleCount++;
+        const card = document.createElement("div");
+        card.className = "pos-appt-card p-2 border rounded-2 mb-2 bg-white";
+        card.style.cursor = "pointer";
+        card.dataset.apptId = appt.id;
+        const isOngoing = appt.is_ongoing || appt.slot === "ongoing";
+        card.innerHTML = `
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <strong class="text-dark"><i class="bi bi-person-fill text-primary me-1"></i>${appt.customer_name}</strong>
+            <div class="d-flex align-items-center gap-1">
+              ${isOngoing ? '<span class="badge bg-warning text-dark border border-warning font-monospace" style="font-size:0.68rem;"><i class="bi bi-hourglass-split me-1"></i>Active Session</span>' : (appt.is_today ? '<span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.68rem;">Today</span>' : '')}
+              <span class="badge bg-light text-dark border font-monospace">${appt.time_display}</span>
+            </div>
+          </div>
+          <div class="d-flex justify-content-between align-items-center small text-muted">
+            <span class="text-truncate" style="max-width: 65%;"><i class="bi bi-scissors me-1 text-muted"></i>${appt.services_summary}</span>
+            <span class="badge text-bg-light border text-truncate">Ref #${appt.ref}</span>
+          </div>
+        `;
+        card.addEventListener("click", () => selectAppointment(appt));
+        apptListEl.appendChild(card);
+      });
+    }
+
+    if (apptCountBadge) {
+      apptCountBadge.textContent = `${visibleCount} available`;
+    }
+  }
+
+  function selectAppointment(appt) {
+    if (apptSelect) apptSelect.value = appt.id;
+    if (custSelect && appt.customer_id) custSelect.value = appt.customer_id;
+
+    if (linkedNameEl) linkedNameEl.textContent = appt.customer_name;
+    if (linkedMetaEl) linkedMetaEl.textContent = `${appt.time_display} (${appt.date_display}) · Ref #${appt.ref}`;
+    if (linkedServicesEl) linkedServicesEl.textContent = appt.services_summary;
+
+    if (bookedLinkedBanner) bookedLinkedBanner.style.display = "block";
+    if (bookedPickerContainer) bookedPickerContainer.style.display = "none";
+
+    loadAppointment(appt.id);
+  }
+
+  btnUnlinkAppt?.addEventListener("click", () => {
+    if (apptSelect) apptSelect.value = "";
+    if (bookedLinkedBanner) bookedLinkedBanner.style.display = "none";
+    if (bookedPickerContainer) bookedPickerContainer.style.display = "block";
+    if (ongoingBanner) ongoingBanner.style.display = "none";
+    if (btnSaveToOngoing) btnSaveToOngoing.style.display = "none";
+    currentLoadedAppointment = null;
+    clearServiceRows();
+  });
+
+  apptSlotBtns.forEach(btn => {
+    btn.addEventListener("click", function() {
+      apptSlotBtns.forEach(b => b.classList.remove("active", "btn-brand"));
+      this.classList.add("active", "btn-brand");
+      renderBookedAppointments();
+    });
+  });
+
+  apptSearchInput?.addEventListener("input", function() {
+    if (apptClearBtn) {
+      apptClearBtn.style.display = this.value ? "block" : "none";
+    }
+    renderBookedAppointments();
+  });
+
+  apptClearBtn?.addEventListener("click", function() {
+    if (apptSearchInput) apptSearchInput.value = "";
+    this.style.display = "none";
+    renderBookedAppointments();
+  });
+
+  // Initialize Mode and Selections on Page Load
+  setCustomerMode(initialMode);
+  if (initialMode === "booked") {
+    const currentApptId = apptSelect?.value;
+    if (currentApptId) {
+      const found = eligibleAppointments.find(a => String(a.id) === String(currentApptId));
+      if (found) selectAppointment(found);
+    }
+  } else {
+    if (custSelect && custSelect.value) {
+      const matched = customersCatalog.find(c => String(c.id) === String(custSelect.value));
+      if (matched) selectCustomer(matched);
+    }
   }
 
   // Handle Form Submission and Cash Tender Notification
@@ -643,8 +1412,454 @@ document.addEventListener("DOMContentLoaded", function () {
     if (initialMethod === "MAYA" && mayaRefInput) mayaRefInput.value = paymentRefHidden.value;
   }
 
+  // -------------------------------------------------------------------------
+  // Dynamic Service <-> Technician Qualification & Time Slots
+  // -------------------------------------------------------------------------
+  function updateServiceBadge(row) {
+    const serviceSelect = row.querySelector(".pos-service");
+    const staffSelect = row.querySelector('select[name$="-assigned_staff"]');
+    const serviceBadge = row.querySelector(".pos-service-status-badge");
+    if (!serviceBadge) return;
+
+    const serviceId = serviceSelect ? serviceSelect.value : "";
+    const staffId = staffSelect ? staffSelect.value : "";
+
+    if (serviceId) {
+      let svcDetail = null;
+      for (const catGroup of allServicesCatalog) {
+        const found = catGroup.services.find(s => String(s.id) === String(serviceId));
+        if (found) {
+          svcDetail = found;
+          break;
+        }
+      }
+      if (svcDetail) {
+        serviceBadge.innerHTML = `<span class="badge bg-light text-secondary border text-truncate"><i class="bi bi-tag me-1 text-primary"></i>${svcDetail.category} &bull; ${svcDetail.duration}m</span>`;
+      } else {
+        serviceBadge.innerHTML = "";
+      }
+    } else if (staffId && staffQualifiedServices[staffId]) {
+      const count = staffQualifiedServices[staffId].length;
+      serviceBadge.innerHTML = `<span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-filter me-1"></i>${count} services qualified</span>`;
+    } else {
+      serviceBadge.innerHTML = "";
+    }
+  }
+
+  function updateQualifiedServices(row, preferredServiceId = null) {
+    const serviceSelect = row.querySelector(".pos-service");
+    const staffSelect = row.querySelector('select[name$="-assigned_staff"]');
+    if (!serviceSelect) return;
+
+    const staffId = staffSelect ? staffSelect.value : "";
+    const currentServiceVal = preferredServiceId !== null ? String(preferredServiceId) : serviceSelect.value;
+
+    serviceSelect.innerHTML = "";
+
+    if (staffId && staffQualifiedServices[staffId]) {
+      const allowedIds = new Set(staffQualifiedServices[staffId].map(String));
+      const defaultOpt = document.createElement("option");
+      defaultOpt.value = "";
+      defaultOpt.textContent = `-- Select Service (${allowedIds.size} available) --`;
+      serviceSelect.appendChild(defaultOpt);
+
+      let foundCurrent = false;
+
+      allServicesCatalog.forEach(catGroup => {
+        const matchingServices = catGroup.services.filter(s => allowedIds.has(String(s.id)));
+        if (matchingServices.length > 0) {
+          const optGroup = document.createElement("optgroup");
+          optGroup.label = catGroup.category;
+          matchingServices.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s.id;
+            opt.textContent = s.label;
+            if (String(s.id) === String(currentServiceVal)) {
+              opt.selected = true;
+              foundCurrent = true;
+            }
+            optGroup.appendChild(opt);
+          });
+          serviceSelect.appendChild(optGroup);
+        }
+      });
+
+      if (currentServiceVal && foundCurrent) {
+        serviceSelect.value = currentServiceVal;
+      } else {
+        serviceSelect.value = "";
+      }
+    } else {
+      const defaultOpt = document.createElement("option");
+      defaultOpt.value = "";
+      defaultOpt.textContent = "-- Select Service --";
+      serviceSelect.appendChild(defaultOpt);
+
+      allServicesCatalog.forEach(catGroup => {
+        const optGroup = document.createElement("optgroup");
+        optGroup.label = catGroup.category;
+        catGroup.services.forEach(s => {
+          const opt = document.createElement("option");
+          opt.value = s.id;
+          opt.textContent = s.label;
+          if (String(s.id) === String(currentServiceVal)) {
+            opt.selected = true;
+          }
+          optGroup.appendChild(opt);
+        });
+        serviceSelect.appendChild(optGroup);
+      });
+
+      serviceSelect.value = currentServiceVal;
+    }
+
+    serviceSelect.title = serviceSelect.options[serviceSelect.selectedIndex]?.text || "";
+    updateServiceBadge(row);
+  }
+
+  function updateQualifiedTechnicians(row, preferredStaffId = null) {
+    const serviceSelect = row.querySelector(".pos-service");
+    const staffSelect = row.querySelector('select[name$="-assigned_staff"]');
+    const badgeEl = row.querySelector(".pos-staff-status-badge");
+    if (!staffSelect) return;
+
+    const serviceId = serviceSelect ? serviceSelect.value : "";
+    const currentStaffVal = preferredStaffId !== null ? String(preferredStaffId) : staffSelect.value;
+
+    staffSelect.innerHTML = '<option value="">Unassigned</option>';
+
+    if (serviceId && qualifiedStaffMap[serviceId]) {
+      const qualifiedList = qualifiedStaffMap[serviceId];
+      let hasCurrentStaff = false;
+
+      qualifiedList.forEach(tech => {
+        const opt = document.createElement("option");
+        opt.value = tech.id;
+        opt.textContent = tech.name;
+        if (String(tech.id) === String(currentStaffVal)) {
+          opt.selected = true;
+          hasCurrentStaff = true;
+        }
+        staffSelect.appendChild(opt);
+      });
+
+      if (currentStaffVal && hasCurrentStaff) {
+        staffSelect.value = currentStaffVal;
+      } else {
+        staffSelect.value = "";
+      }
+
+      if (badgeEl) {
+        badgeEl.innerHTML = `<span class="badge bg-light text-secondary border"><i class="bi bi-people me-1 text-primary"></i>${qualifiedList.length} qualified technician${qualifiedList.length === 1 ? '' : 's'}</span>`;
+      }
+    } else {
+      allStaffOptions.forEach(tech => {
+        const opt = document.createElement("option");
+        opt.value = tech.id;
+        opt.textContent = tech.name;
+        if (String(tech.id) === String(currentStaffVal)) {
+          opt.selected = true;
+        }
+        staffSelect.appendChild(opt);
+      });
+      staffSelect.value = currentStaffVal;
+      if (badgeEl) {
+        if (currentStaffVal) {
+          badgeEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check2-circle me-1"></i>Technician Assigned</span>';
+        } else {
+          badgeEl.innerHTML = '<span class="text-muted"><i class="bi bi-info-circle me-1"></i>Select technician or service</span>';
+        }
+      }
+    }
+
+    staffSelect.title = staffSelect.options[staffSelect.selectedIndex]?.text || "";
+  }
+
+  function updateTechnicianAvailableSlots(row, preferredTime = null) {
+    const serviceSelect = row.querySelector(".pos-service");
+    const staffSelect = row.querySelector('select[name$="-assigned_staff"]');
+    const rawTimeInput = row.querySelector('input[name$="-service_time"]');
+    const timeSelect = row.querySelector(".pos-time-select");
+    const timeHint = row.querySelector(".pos-time-hint");
+
+    if (!staffSelect || !rawTimeInput || !timeSelect) return;
+
+    const staffId = staffSelect.value;
+    const serviceId = serviceSelect ? serviceSelect.value : "";
+    const targetTime = preferredTime !== null ? preferredTime : rawTimeInput.value;
+
+    if (!staffId) {
+      timeSelect.classList.add("d-none");
+      timeSelect.style.display = "none";
+      rawTimeInput.style.display = "";
+      if (timeHint) {
+        timeHint.innerHTML = '<span class="text-muted"><i class="bi bi-info-circle me-1"></i>Select technician to load slots</span>';
+      }
+      return;
+    }
+
+    if (timeHint) {
+      timeHint.innerHTML = '<span class="text-muted"><i class="spinner-border spinner-border-sm me-1" style="width: 10px; height: 10px;"></i>Checking available slots...</span>';
+    }
+
+    const apptInput = document.getElementById("id_appointment");
+    const apptId = apptInput ? apptInput.value : "";
+    let url = `/pos/api/technician-slots/?staff_id=${encodeURIComponent(staffId)}${serviceId ? `&service_id=${encodeURIComponent(serviceId)}` : ""}`;
+    if (apptId) {
+      url += `&exclude_appointment_id=${encodeURIComponent(apptId)}`;
+    }
+
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "off_duty") {
+          timeSelect.classList.add("d-none");
+          timeSelect.style.display = "none";
+          rawTimeInput.style.display = "";
+          rawTimeInput.value = "";
+          if (timeHint) {
+            timeHint.innerHTML = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-exclamation-triangle-fill me-1"></i>${data.message || 'Off Duty Today'}</span>`;
+          }
+        } else if (data.status === "ok") {
+          timeSelect.innerHTML = "";
+          const defaultOpt = document.createElement("option");
+          defaultOpt.value = "";
+          defaultOpt.textContent = `-- Select Time (${data.slots_count} slots) --`;
+          timeSelect.appendChild(defaultOpt);
+
+          let foundTarget = false;
+          let nowSlotTime = null;
+          (data.slots || []).forEach(slot => {
+            const opt = document.createElement("option");
+            opt.value = slot.time;
+            opt.textContent = `${slot.label} (Available)`;
+            if (slot.is_now) {
+              nowSlotTime = slot.time;
+            }
+            if (targetTime && (targetTime === slot.time || targetTime.startsWith(slot.time))) {
+              opt.selected = true;
+              foundTarget = true;
+            }
+            timeSelect.appendChild(opt);
+          });
+
+          // Auto-select current active slot for seamless walk-ins if no previous target time was chosen
+          if (!targetTime && !foundTarget && nowSlotTime) {
+            timeSelect.value = nowSlotTime;
+            foundTarget = true;
+          }
+
+          if (targetTime && !foundTarget) {
+            const customOpt = document.createElement("option");
+            customOpt.value = targetTime;
+            customOpt.textContent = `${targetTime} (Selected)`;
+            customOpt.selected = true;
+            timeSelect.appendChild(customOpt);
+          }
+
+          timeSelect.classList.remove("d-none");
+          timeSelect.style.display = "block";
+          rawTimeInput.style.display = "none";
+
+          if (timeSelect.value) {
+            rawTimeInput.value = timeSelect.value;
+          }
+
+          if (timeHint) {
+            timeHint.innerHTML = `<span class="text-muted"><i class="bi bi-calendar2-check me-1 text-success"></i>${data.shift_display} &bull; <strong class="text-dark">${data.slots_count}</strong> slots</span>`;
+          }
+        }
+      })
+      .catch(err => {
+        console.error("Error fetching technician slots:", err);
+        timeSelect.classList.add("d-none");
+        timeSelect.style.display = "none";
+        rawTimeInput.style.display = "";
+        if (timeHint) timeHint.innerHTML = "";
+      });
+  }
+
+  function propagateSequentialTimes() {
+    const visibleRows = Array.from(document.querySelectorAll(".pos-item-row")).filter(r => r.style.display !== "none" && !r.classList.contains("pos-row-hidden"));
+    for (let i = 0; i < visibleRows.length - 1; i++) {
+      const curRow = visibleRows[i];
+      const nextRow = visibleRows[i + 1];
+      const curSvc = curRow.querySelector(".pos-service");
+      const curTime = curRow.querySelector('input[name$="-service_time"]');
+      const curStaff = curRow.querySelector('select[name$="-assigned_staff"]');
+      const nextStaff = nextRow.querySelector('select[name$="-assigned_staff"]');
+      const nextTime = nextRow.querySelector('input[name$="-service_time"]');
+
+      if (curSvc && curSvc.value && curTime && curTime.value && allServicesMap[curSvc.value]) {
+        const dur = allServicesMap[curSvc.value].duration || 30;
+        const parts = curTime.value.split(":");
+        if (parts.length >= 2) {
+          const startMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+          const nextMin = startMin + dur;
+          const nextH = Math.floor(nextMin / 60) % 24;
+          const nextM = nextMin % 60;
+          const estimatedTime = `${String(nextH).padStart(2, '0')}:${String(nextM).padStart(2, '0')}`;
+
+          if (nextStaff && curStaff && curStaff.value && !nextStaff.value) {
+            nextStaff.value = curStaff.value;
+            updateQualifiedServices(nextRow, "");
+            updateTechnicianAvailableSlots(nextRow, estimatedTime);
+          } else if (nextStaff && nextStaff.value && (!nextTime || !nextTime.value)) {
+            updateTechnicianAvailableSlots(nextRow, estimatedTime);
+          }
+        }
+      }
+    }
+  }
+
+  // Bind row-level change events
+  document.querySelectorAll(".pos-item-row").forEach(row => {
+    const serviceSelect = row.querySelector(".pos-service");
+    const staffSelect = row.querySelector('select[name$="-assigned_staff"]');
+    const rawTimeInput = row.querySelector('input[name$="-service_time"]');
+    const timeSelect = row.querySelector(".pos-time-select");
+
+    if (serviceSelect) {
+      serviceSelect.addEventListener("change", function () {
+        const currentStaffVal = staffSelect ? staffSelect.value : "";
+        if (!currentStaffVal) {
+          updateQualifiedTechnicians(row, null);
+        }
+        updateServiceBadge(row);
+        this.title = this.options[this.selectedIndex]?.text || "";
+        updateTechnicianAvailableSlots(row);
+        calculate();
+      });
+    }
+
+    if (staffSelect) {
+      staffSelect.addEventListener("change", function () {
+        const currentServiceVal = serviceSelect ? serviceSelect.value : "";
+        // When technician is selected, filter services to what this technician knows!
+        updateQualifiedServices(row, currentServiceVal);
+
+        const badgeEl = row.querySelector(".pos-staff-status-badge");
+        if (badgeEl) {
+          if (this.value) {
+            badgeEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check2-circle me-1"></i>Technician Assigned</span>';
+          } else {
+            badgeEl.innerHTML = "";
+          }
+        }
+        this.title = this.options[this.selectedIndex]?.text || "";
+
+        updateTechnicianAvailableSlots(row);
+        calculate();
+      });
+    }
+
+    if (timeSelect && rawTimeInput) {
+      timeSelect.addEventListener("change", function () {
+        rawTimeInput.value = this.value;
+        propagateSequentialTimes();
+      });
+    }
+
+    // Initialize existing selections on page load
+    if (staffSelect && staffSelect.value) {
+      updateQualifiedServices(row, serviceSelect ? serviceSelect.value : null);
+      const badgeEl = row.querySelector(".pos-staff-status-badge");
+      if (badgeEl) {
+        badgeEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check2-circle me-1"></i>Technician Assigned</span>';
+      }
+      staffSelect.title = staffSelect.options[staffSelect.selectedIndex]?.text || "";
+      updateTechnicianAvailableSlots(row, rawTimeInput ? rawTimeInput.value : null);
+    } else if (serviceSelect && serviceSelect.value) {
+      updateQualifiedTechnicians(row, staffSelect ? staffSelect.value : null);
+      updateServiceBadge(row);
+      if (staffSelect && staffSelect.value) {
+        updateTechnicianAvailableSlots(row, rawTimeInput ? rawTimeInput.value : null);
+      }
+    }
+  });
+
   const appointmentSelect = document.getElementById("id_appointment");
   const customerSelect = document.getElementById("id_customer");
+
+  // Dynamic Add / Remove Service Row handlers
+  const addServiceBtn = document.getElementById("pos-add-service-btn");
+  const addServiceHint = document.getElementById("pos-add-service-hint");
+
+  function checkAddButtonState() {
+    const hiddenRows = Array.from(document.querySelectorAll(".pos-item-row")).filter(r => r.style.display === "none");
+    if (addServiceBtn) {
+      if (hiddenRows.length === 0) {
+        addServiceBtn.style.display = "none";
+        if (addServiceHint) addServiceHint.textContent = "Naabot na ang maximum na dami ng serbisyo.";
+      } else {
+        addServiceBtn.style.display = "";
+        if (addServiceHint) addServiceHint.textContent = "Pindutin kung may dagdag pang serbisyo ang customer";
+      }
+    }
+  }
+
+  if (addServiceBtn) {
+    addServiceBtn.addEventListener("click", function () {
+      let nextRow = null;
+      document.querySelectorAll(".pos-item-row").forEach(row => {
+        if (!nextRow && (row.style.display === "none" || row.classList.contains("pos-row-hidden"))) {
+          nextRow = row;
+        }
+      });
+
+      if (nextRow) {
+        nextRow.style.display = "flex";
+        nextRow.classList.remove("pos-row-hidden");
+        propagateSequentialTimes();
+        const svc = nextRow.querySelector(".pos-service");
+        if (svc) svc.focus();
+      }
+      checkAddButtonState();
+      calculate();
+    });
+  }
+
+  document.querySelectorAll(".pos-remove-row-btn").forEach(btn => {
+    btn.addEventListener("click", function () {
+      const row = this.closest(".pos-item-row");
+      if (!row) return;
+
+      const visibleRows = Array.from(document.querySelectorAll(".pos-item-row")).filter(r => r.style.display !== "none");
+
+      const serviceSelect = row.querySelector(".pos-service");
+      const staffSelect = row.querySelector('select[name$="-assigned_staff"]');
+      const rawTimeInput = row.querySelector('input[name$="-service_time"]');
+      const timeSelect = row.querySelector(".pos-time-select");
+      const timeHint = row.querySelector(".pos-time-hint");
+      const badgeEl = row.querySelector(".pos-staff-status-badge");
+      const serviceBadge = row.querySelector(".pos-service-status-badge");
+
+      if (serviceSelect) {
+        updateQualifiedServices(row, "");
+        serviceSelect.value = "";
+      }
+      if (staffSelect) staffSelect.value = "";
+      if (rawTimeInput) rawTimeInput.value = "";
+      if (timeSelect) {
+        timeSelect.classList.add("d-none");
+        timeSelect.style.display = "none";
+      }
+      if (rawTimeInput) rawTimeInput.style.display = "";
+      if (timeHint) timeHint.innerHTML = "";
+      if (badgeEl) badgeEl.innerHTML = "";
+      if (serviceBadge) serviceBadge.innerHTML = "";
+
+      if (visibleRows.length > 1) {
+        row.style.display = "none";
+        row.classList.add("pos-row-hidden");
+      }
+
+      checkAddButtonState();
+      calculate();
+    });
+  });
+
+  checkAddButtonState();
 
   function loadAppointment(apptId) {
     if (!apptId) return;
@@ -654,31 +1869,90 @@ document.addEventListener("DOMContentLoaded", function () {
         return response.json();
       })
       .then(data => {
+        currentLoadedAppointment = data;
         if (customerSelect && data.customer_id) {
           customerSelect.value = data.customer_id;
         }
+
+        // Active session banner update
+        if (data.is_ongoing) {
+          if (ongoingBanner) {
+            ongoingBanner.style.setProperty("display", "flex", "important");
+            if (ongoingBannerTitle) {
+              ongoingBannerTitle.innerHTML = `<span class="badge bg-warning text-dark me-1 font-monospace"><i class="bi bi-hourglass-split me-1"></i>ACTIVE SESSION</span> ${data.customer_name} (Ref #${data.ref || data.appointment_id})`;
+            }
+            if (ongoingBannerDesc) {
+              ongoingBannerDesc.innerHTML = `Client is currently seated in salon (started at ${data.start_time}). To add another treatment, click <strong>"+ Add Service"</strong> below, pick technician &amp; time, then checkout or click <strong>"Add to Session (Pay Later)"</strong>.`;
+            }
+            if (btnSaveToOngoing) {
+              btnSaveToOngoing.style.setProperty("display", "inline-block", "important");
+            }
+          }
+        } else {
+          if (ongoingBanner) ongoingBanner.style.setProperty("display", "none", "important");
+          if (btnSaveToOngoing) btnSaveToOngoing.style.setProperty("display", "none", "important");
+        }
+
         const rows = document.querySelectorAll(".pos-item-row");
         if (data.items && data.items.length > 0) {
           data.items.forEach((item, index) => {
             if (index < rows.length) {
               const row = rows[index];
+              row.style.display = "flex";
+              row.classList.remove("pos-row-hidden");
+              row.dataset.existingService = "1";
               const serviceElem = row.querySelector(".pos-service");
               const staffElem = row.querySelector('select[name$="-assigned_staff"]');
-              const timeElem = row.querySelector('input[name$="-service_time"]');
-              if (serviceElem) serviceElem.value = item.service_id;
-              if (staffElem && item.assigned_staff_id) staffElem.value = item.assigned_staff_id;
-              if (timeElem) timeElem.value = item.service_time || data.start_time || "";
+              const rawTimeInput = row.querySelector('input[name$="-service_time"]');
+              if (staffElem && item.assigned_staff_id) {
+                staffElem.value = item.assigned_staff_id;
+                updateQualifiedServices(row, item.service_id);
+              } else if (serviceElem) {
+                serviceElem.value = item.service_id;
+                updateQualifiedTechnicians(row, item.assigned_staff_id);
+              }
+              updateServiceBadge(row);
+              if (rawTimeInput) rawTimeInput.value = item.service_time || data.start_time || "";
+              updateTechnicianAvailableSlots(row, item.service_time || data.start_time || "");
             }
           });
           for (let i = data.items.length; i < rows.length; i++) {
             const row = rows[i];
+            row.dataset.existingService = "0";
             const serviceElem = row.querySelector(".pos-service");
             const staffElem = row.querySelector('select[name$="-assigned_staff"]');
             const timeElem = row.querySelector('input[name$="-service_time"]');
-            if (serviceElem) serviceElem.value = "";
+            const timeSelect = row.querySelector(".pos-time-select");
+            const timeHint = row.querySelector(".pos-time-hint");
+            const badgeEl = row.querySelector(".pos-staff-status-badge");
+            const serviceBadge = row.querySelector(".pos-service-status-badge");
             if (staffElem) staffElem.value = "";
+            if (serviceElem) {
+              updateQualifiedServices(row, "");
+              serviceElem.value = "";
+            }
             if (timeElem) timeElem.value = "";
+            if (timeSelect) {
+              timeSelect.classList.add("d-none");
+              timeSelect.style.display = "none";
+            }
+            if (timeElem) timeElem.style.display = "";
+            if (timeHint) timeHint.innerHTML = "";
+            if (badgeEl) badgeEl.innerHTML = "";
+            if (serviceBadge) serviceBadge.innerHTML = "";
+
+            if (i > data.items.length) {
+              row.style.display = "none";
+              row.classList.add("pos-row-hidden");
+            } else if (i === data.items.length && data.is_ongoing) {
+              row.style.display = "flex";
+              row.classList.remove("pos-row-hidden");
+            } else if (i > 0) {
+              row.style.display = "none";
+              row.classList.add("pos-row-hidden");
+            }
           }
+          checkAddButtonState();
         }
         calculate();
       })
@@ -686,6 +1960,62 @@ document.addEventListener("DOMContentLoaded", function () {
         console.error("Error loading appointment details:", err);
       });
   }
+
+  // Handle "+ Add to Active Session (Pay Later)" button
+  btnSaveToOngoing?.addEventListener("click", async function () {
+    if (!currentLoadedAppointment || !currentLoadedAppointment.appointment_id) {
+      alert("Walang aktibong appointment/session na napili.");
+      return;
+    }
+
+    const rows = Array.from(document.querySelectorAll(".pos-item-row"));
+    const newServiceRow = rows.find(r => r.style.display !== "none" && r.dataset.existingService !== "1" && r.querySelector(".pos-service")?.value);
+
+    if (!newServiceRow) {
+      alert("Pumili muna ng serbisyo sa bagong row (i-click ang '+ Add Service') na gustong idagdag sa active session.");
+      return;
+    }
+
+    const serviceSelect = newServiceRow.querySelector(".pos-service");
+    const staffSelect = newServiceRow.querySelector('select[name$="-assigned_staff"]');
+    const timeInput = newServiceRow.querySelector('input[name$="-service_time"]');
+
+    const serviceId = serviceSelect ? serviceSelect.value : "";
+    const staffId = staffSelect ? staffSelect.value : "";
+    const serviceTime = timeInput ? timeInput.value : "";
+
+    const originalBtnHtml = this.innerHTML;
+    this.disabled = true;
+    this.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Adding...`;
+
+    try {
+      const resp = await fetch(`/pos/api/appointment/${currentLoadedAppointment.appointment_id}/add-service/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify({
+          service_id: serviceId,
+          staff_id: staffId,
+          service_time: serviceTime,
+        }),
+      });
+      const res = await resp.json();
+      if (!resp.ok || res.status !== "ok") {
+        throw new Error(res.message || "Failed to add service to session");
+      }
+
+      alert(`✅ ${res.message}`);
+      newServiceRow.dataset.existingService = "1";
+      loadAppointment(currentLoadedAppointment.appointment_id);
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      this.disabled = false;
+      this.innerHTML = originalBtnHtml;
+    }
+  });
 
   if (appointmentSelect) {
     appointmentSelect.addEventListener("change", function () {

@@ -878,6 +878,83 @@ class ServicesModuleTests(TestCase):
         self.assertNotIn("12:30", slots)
         self.assertIn("10:00", slots)
 
+    def test_schedule_list_contains_search_bar_and_zero_reload_views(self):
+        """Staff schedules page renders search bar, view mode switcher, and all 3 view containers."""
+        client = Client()
+        client.force_login(self.owner)
+        response = client.get(reverse("services:schedule_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="scheduleSearchInput"')
+        self.assertContains(response, 'id="viewModeRoster"')
+        self.assertContains(response, 'id="viewModeDaily"')
+        self.assertContains(response, 'id="viewModeTable"')
+        self.assertContains(response, 'id="quickEditShiftModal"')
+        self.assertContains(response, 'id="syncShiftsForm"')
+
+    def test_schedule_list_ajax_sync_time_blocks(self):
+        """Sync shifts returns JSON with XMLHttpRequest header without reloading/redirecting."""
+        client = Client()
+        client.force_login(self.owner)
+        response = client.post(
+            reverse("services:schedule_list"),
+            {"action": "sync_time_blocks"},
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertIn("Successfully synchronized", data["message"])
+
+    def test_schedule_update_ajax_get_and_post(self):
+        """Schedule update endpoint supports GET and POST via AJAX for modal editing."""
+        sched = StaffSchedule.objects.create(
+            staff=self.staff,
+            day_of_week=StaffSchedule.DayOfWeek.TUESDAY,
+            start_time=time(9, 0),
+            end_time=time(21, 0),
+            lunch_start=time(12, 0),
+            lunch_end=time(13, 0),
+            is_working=True,
+        )
+        client = Client()
+        client.force_login(self.owner)
+
+        # 1. AJAX GET returns schedule details
+        get_res = client.get(
+            reverse("services:schedule_update", args=[sched.pk]),
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+        self.assertEqual(get_res.status_code, 200)
+        get_data = get_res.json()
+        self.assertEqual(get_data["status"], "ok")
+        self.assertEqual(get_data["schedule"]["id"], sched.pk)
+
+        # 2. AJAX POST updates schedule and returns JSON
+        post_res = client.post(
+            reverse("services:schedule_update", args=[sched.pk]),
+            {
+                "staff": self.staff.pk,
+                "day_of_week": StaffSchedule.DayOfWeek.TUESDAY,
+                "start_time": "10:00",
+                "end_time": "20:00",
+                "lunch_start": "12:30",
+                "lunch_end": "13:30",
+                "is_working": "true",
+            },
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+        self.assertEqual(post_res.status_code, 200)
+        post_data = post_res.json()
+        self.assertEqual(post_data["status"], "ok")
+        self.assertEqual(post_data["schedule"]["start_time"], "10:00")
+        self.assertEqual(post_data["schedule"]["end_time"], "20:00")
+
+        # Verify DB updated
+        sched.refresh_from_db()
+        self.assertEqual(sched.start_time, time(10, 0))
+        self.assertEqual(sched.end_time, time(20, 0))
+
+
 
 
 

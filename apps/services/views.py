@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -376,20 +377,29 @@ def staff_delete(request, pk):
 @require_http_methods(["GET", "POST"])
 def schedule_list(request):
     if request.method == "POST":
+        is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest" or request.POST.get("ajax") == "1"
         if not request.user.is_owner:
+            if is_ajax:
+                return JsonResponse({"status": "error", "message": "Only the owner/manager has permission to update staff rosters."}, status=403)
             messages.error(request, "Only the owner/manager has permission to update staff rosters.")
             return redirect("services:schedule_list")
         action = request.POST.get("action")
         if action == "sync_time_blocks":
             from .schedules import sync_staff_time_blocks
             count = sync_staff_time_blocks(weeks=4)
-            messages.success(request, f"Successfully synchronized {count} calendar time blocks (Lunch & Leave) for the visual planner.")
+            msg = f"Successfully synchronized {count} calendar time blocks (Lunch & Leave) for the visual planner."
+            if is_ajax:
+                return JsonResponse({"status": "ok", "message": msg, "count": count})
+            messages.success(request, msg)
             return redirect("services:schedule_list")
         elif action == "apply_default_roster":
             from .schedules import apply_staff_weekly_schedules, sync_staff_time_blocks
             apply_staff_weekly_schedules()
             count = sync_staff_time_blocks(weeks=4)
-            messages.success(request, f"Re-applied standard roster (Mon-Sun, 1 day leave per staff, 12pm-1pm lunch) and synchronized {count} time blocks.")
+            msg = f"Re-applied standard roster (Mon-Sun, 1 day leave per staff, 12pm-1pm lunch) and synchronized {count} time blocks."
+            if is_ajax:
+                return JsonResponse({"status": "ok", "message": msg, "count": count})
+            messages.success(request, msg)
             return redirect("services:schedule_list")
 
     all_schedules = list(
@@ -420,10 +430,33 @@ def schedule_list(request):
             specialties_set.add(specialty)
 
         spec_lower = specialty.lower()
-        if any(k in spec_lower for k in ("gel", "extension", "art", "acrylic", "chrome", "cat eye")):
+        spec_categories = []
+
+        # 1. Classic Nail Care (All staff who know nail tech / manicure / pedicure / nail services)
+        is_nail_tech = any(k in spec_lower for k in (
+            "nail", "tech", "manicure", "pedicure", "mani", "pedi", "russian",
+            "gel", "polish", "extension", "acrylic", "art", "chrome", "cat eye", "softgel"
+        )) or (profile and profile.skills.filter(category__name__icontains="classic").exists())
+
+        if is_nail_tech:
+            spec_categories.append("classic_care")
+
+        # 2. Nail Art & Extensions
+        if any(k in spec_lower for k in ("art", "extension", "acrylic", "chrome", "cat eye", "softgel", "gel", "tech")):
+            spec_categories.append("nail_art")
+
+        # 3. Lashes, Brows & Spa
+        if any(k in spec_lower for k in ("lash", "brow", "threading", "wax", "spa", "reflex", "massage", "candling", "paraffin")):
+            spec_categories.append("spa_lashes")
+
+        if not spec_categories:
+            spec_categories.append("classic_care")
+
+        # Primary category label for display
+        if "nail_art" in spec_categories:
             spec_category = "nail_art"
             spec_category_label = "Nail Art & Extensions"
-        elif any(k in spec_lower for k in ("lash", "brow", "wax", "spa", "reflex", "massage", "candling", "paraffin")):
+        elif "spa_lashes" in spec_categories and not is_nail_tech:
             spec_category = "spa_lashes"
             spec_category_label = "Lashes, Brows & Spa"
         else:
@@ -435,6 +468,8 @@ def schedule_list(request):
             "staff": st,
             "specialty": specialty,
             "spec_category": spec_category,
+            "spec_categories": spec_categories,
+            "spec_categories_str": " ".join(spec_categories),
             "spec_category_label": spec_category_label,
             "schedules": st_scheds,
             "working_count": len(working_scheds),
@@ -462,14 +497,17 @@ def schedule_list(request):
     if staff_id and staff_id.isdigit():
         filtered_roster = [r for r in filtered_roster if r["staff"].id == int(staff_id)]
     if spec_filter:
-        filtered_roster = [r for r in filtered_roster if r["spec_category"] == spec_filter]
+        filtered_roster = [r for r in filtered_roster if spec_filter in r["spec_categories"]]
 
     category_counts = {
         "all": len(staff_roster),
-        "nail_art": sum(1 for r in staff_roster if r["spec_category"] == "nail_art"),
-        "spa_lashes": sum(1 for r in staff_roster if r["spec_category"] == "spa_lashes"),
-        "classic_care": sum(1 for r in staff_roster if r["spec_category"] == "classic_care"),
+        "nail_art": sum(1 for r in staff_roster if "nail_art" in r["spec_categories"]),
+        "spa_lashes": sum(1 for r in staff_roster if "spa_lashes" in r["spec_categories"]),
+        "classic_care": sum(1 for r in staff_roster if "classic_care" in r["spec_categories"]),
     }
+
+    # Search parameter (for query matching & live search initialization)
+    search_param = (request.GET.get("q") or request.GET.get("search") or "").strip()
 
     # Daily duty categorization
     today_code = timezone.localdate().weekday()
@@ -488,6 +526,8 @@ def schedule_list(request):
             "off_count": len(day_off),
             "is_selected": (code == selected_day_code),
             "is_today": (code == today_code),
+            "on_duty": day_working,
+            "off_duty": day_off,
         })
 
     selected_day_scheds = [s for s in all_schedules if s.day_of_week == selected_day_code]
@@ -518,10 +558,12 @@ def schedule_list(request):
         {
             "view_mode": view_mode,
             "page_obj": page_obj,
+            "all_table_schedules": all_schedules,
             "staff_id": staff_id,
             "staff_list": staff_list,
             "day_param": day_param,
             "status_param": status_param,
+            "search_param": search_param,
             "day_choices": StaffSchedule.DayOfWeek.choices,
             "total_staff_count": staff_list.count(),
             "working_count": StaffSchedule.objects.filter(is_working=True).count(),
@@ -552,6 +594,8 @@ def schedule_create(request):
         request, form, "Staff shift schedule created.", "services:schedule_list"
     )
     if response:
+        from .schedules import sync_staff_time_blocks
+        sync_staff_time_blocks(weeks=4)
         return response
     return render(
         request,
@@ -569,10 +613,59 @@ def schedule_update(request, pk):
         instance=schedule,
         actor=request.user,
     )
+    is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest" or request.POST.get("ajax") == "1"
+    if request.method == "POST" and is_ajax:
+        if form.is_valid():
+            saved_sched = form.save()
+            from .schedules import sync_staff_time_blocks
+            sync_staff_time_blocks(weeks=4)
+            return JsonResponse({
+                "status": "ok",
+                "message": f"Updated shift schedule for {saved_sched.staff.get_full_name() or saved_sched.staff.email} ({saved_sched.get_day_of_week_display()}).",
+                "schedule": {
+                    "id": saved_sched.pk,
+                    "staff_id": saved_sched.staff_id,
+                    "staff_name": saved_sched.staff.get_full_name() or saved_sched.staff.email,
+                    "day_of_week": saved_sched.day_of_week,
+                    "day_name": saved_sched.get_day_of_week_display(),
+                    "day_short": saved_sched.get_day_of_week_display()[:3],
+                    "is_working": saved_sched.is_working,
+                    "start_time": saved_sched.start_time.strftime("%H:%M") if saved_sched.start_time else "",
+                    "end_time": saved_sched.end_time.strftime("%H:%M") if saved_sched.end_time else "",
+                    "start_time_fmt": saved_sched.start_time.strftime("%I:%M %p").lstrip("0") if saved_sched.start_time else "",
+                    "end_time_fmt": saved_sched.end_time.strftime("%I:%M %p").lstrip("0") if saved_sched.end_time else "",
+                    "lunch_start": saved_sched.lunch_start.strftime("%H:%M") if saved_sched.lunch_start else "",
+                    "lunch_end": saved_sched.lunch_end.strftime("%H:%M") if saved_sched.lunch_end else "",
+                    "lunch_start_fmt": saved_sched.lunch_start.strftime("%I:%M %p").lstrip("0") if saved_sched.lunch_start else "",
+                    "lunch_end_fmt": saved_sched.lunch_end.strftime("%I:%M %p").lstrip("0") if saved_sched.lunch_end else "",
+                }
+            })
+        else:
+            return JsonResponse({"status": "error", "errors": form.errors.get_json_data()}, status=400)
+
+    if request.method == "GET" and is_ajax:
+        return JsonResponse({
+            "status": "ok",
+            "schedule": {
+                "id": schedule.pk,
+                "staff_id": schedule.staff_id,
+                "staff_name": schedule.staff.get_full_name() or schedule.staff.email,
+                "day_of_week": schedule.day_of_week,
+                "day_name": schedule.get_day_of_week_display(),
+                "is_working": schedule.is_working,
+                "start_time": schedule.start_time.strftime("%H:%M") if schedule.start_time else "09:00",
+                "end_time": schedule.end_time.strftime("%H:%M") if schedule.end_time else "21:00",
+                "lunch_start": schedule.lunch_start.strftime("%H:%M") if schedule.lunch_start else "12:00",
+                "lunch_end": schedule.lunch_end.strftime("%H:%M") if schedule.lunch_end else "13:00",
+            }
+        })
+
     response = _save_model_form(
         request, form, "Staff shift schedule updated.", "services:schedule_list"
     )
     if response:
+        from .schedules import sync_staff_time_blocks
+        sync_staff_time_blocks(weeks=4)
         return response
     return render(
         request,
@@ -588,6 +681,8 @@ def schedule_delete(request, pk):
     schedule = get_object_or_404(StaffSchedule.objects.select_related("staff"), pk=pk)
     if request.method == "POST":
         schedule.delete()
+        from .schedules import sync_staff_time_blocks
+        sync_staff_time_blocks(weeks=4)
         messages.success(request, "Staff schedule deleted.")
         return redirect("services:schedule_list")
     return render(
@@ -709,6 +804,18 @@ def _layout_day_blocks(day_raw_blocks, grid_start_min, grid_end_min, day_raw_app
 
     # 3. Process remaining hourly time blocks
     for b in other_blocks:
+        # If this time block was generated by a POS sale that is already rendered as an appointment,
+        # skip creating a duplicate side-by-side block.
+        if (b.reason or "").startswith("POS #") and day_raw_appts:
+            pos_ref = b.reason.split(":")[0].replace("POS #", "").strip()
+            already_covered = any(
+                pos_ref in (a.notes or "") or (getattr(a, "booking_reference", "") == pos_ref)
+                for a in day_raw_appts
+                if a.assigned_staff_id == b.staff_id
+            )
+            if already_covered:
+                continue
+
         s_min = b.start_time.hour * 60 + b.start_time.minute
         e_min = b.end_time.hour * 60 + b.end_time.minute
         eff_s = max(grid_start_min, s_min)

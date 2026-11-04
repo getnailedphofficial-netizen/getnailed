@@ -9,9 +9,10 @@
   <script>
     (function() {
       try {
-        if (localStorage.getItem('admin-sidebar-collapsed') === 'true' && window.innerWidth >= 992) {
+        var isSmall = window.innerWidth < 992;
+        var saved = localStorage.getItem('admin-sidebar-collapsed');
+        if (saved === 'true' || (saved === null && isSmall)) {
           document.documentElement.classList.add('sidebar-collapsed');
-          document.write('<style id="pre-sidebar-style">.sidebar{transform:translateX(-100%)!important;visibility:hidden!important;transition:none!important;}.app-main{margin-left:0!important;width:100%!important;transition:none!important;}</style>');
         }
       } catch (e) {}
     })();

@@ -13,7 +13,10 @@ urlpatterns = [
     path('vouchers/create/', views.voucher_create, name='voucher_create'),
     path('history/', views.history, name='history'),
     path('receipt/<str:receipt_number>/', views.receipt, name='receipt'),
+    path('api/customer/quick-create/', views.api_quick_create_customer, name='api_quick_create_customer'),
     path('api/appointment/<int:pk>/', views.api_appointment_details, name='api_appointment_details'),
+    path('api/appointment/<int:pk>/add-service/', views.api_add_service_to_appointment, name='api_add_service_to_appointment'),
+    path('api/technician-slots/', views.api_technician_slots, name='api_technician_slots'),
     path('void-approval/', views.void_approval, name='void_approval'),
     path('void-approval/<str:receipt_number>/', views.void_detail, name='void_detail'),
 ]

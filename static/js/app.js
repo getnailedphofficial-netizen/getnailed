@@ -12,6 +12,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Highlight active link in sidebar navigation
+  const adminSidebar = document.getElementById('admin-sidebar');
+  const sidebarCollapseToggle = document.getElementById('sidebar-collapse-toggle');
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  const sidebarClose = document.getElementById('sidebar-close');
+  const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+
   const currentPath = window.location.pathname;
   const sidebarLinks = Array.from(document.querySelectorAll('.sidebar-nav a'));
   if (sidebarLinks.length > 0) {
@@ -26,7 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
         link.classList.add('active');
         // Scroll active item smoothly into view within fixed sidebar if overflowing
         try {
-          link.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          if (adminSidebar) {
+            const sidebarRect = adminSidebar.getBoundingClientRect();
+            const linkRect = link.getBoundingClientRect();
+            if (linkRect.top < sidebarRect.top || linkRect.bottom > sidebarRect.bottom) {
+              adminSidebar.scrollTop = link.offsetTop - (adminSidebar.clientHeight / 3);
+            }
+          }
         } catch (e) {}
         matched = true;
         break;
@@ -38,70 +50,70 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Mobile fixed sidebar drawer toggle
-  const sidebarToggle = document.getElementById('sidebar-toggle');
-  const sidebarCollapseToggle = document.getElementById('sidebar-collapse-toggle');
-  const sidebarClose = document.getElementById('sidebar-close');
-  const adminSidebar = document.getElementById('admin-sidebar');
-  const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+  function updateToggleButtons(collapsed) {
+    [sidebarCollapseToggle, sidebarToggle].forEach(btn => {
+      if (btn) {
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.setAttribute('aria-label', collapsed ? 'Open sidebar navigation' : 'Collapse sidebar navigation');
+        btn.title = collapsed ? 'Open sidebar navigation' : 'Collapse sidebar navigation';
+      }
+    });
+  }
 
   function setSidebarCollapsed(collapsed) {
-    const preStyle = document.getElementById('pre-sidebar-style');
-    if (preStyle) preStyle.remove();
+    // Enable transitions once user interacts
+    document.documentElement.classList.add('sidebar-interactive');
+    document.body.classList.add('sidebar-interactive');
+
     document.documentElement.classList.toggle('sidebar-collapsed', collapsed);
     document.body.classList.toggle('sidebar-collapsed', collapsed);
+    document.body.classList.toggle('sidebar-open', !collapsed);
+
+    if (adminSidebar) {
+      adminSidebar.classList.toggle('show', !collapsed);
+    }
+    if (sidebarBackdrop) {
+      sidebarBackdrop.classList.toggle('show', !collapsed);
+    }
+
     try {
       localStorage.setItem('admin-sidebar-collapsed', collapsed ? 'true' : 'false');
     } catch (e) {}
-    if (sidebarCollapseToggle) {
-      sidebarCollapseToggle.setAttribute('aria-expanded', String(!collapsed));
-      sidebarCollapseToggle.setAttribute('aria-label', collapsed ? 'Open sidebar navigation' : 'Hide sidebar navigation');
-      sidebarCollapseToggle.title = collapsed ? 'Open sidebar navigation' : 'Hide sidebar navigation';
-    }
+
+    updateToggleButtons(collapsed);
   }
 
-  // Restore saved collapse state on desktop
-  try {
-    if (localStorage.getItem('admin-sidebar-collapsed') === 'true' && window.innerWidth >= 992) {
-      document.documentElement.classList.add('sidebar-collapsed');
-      document.body.classList.add('sidebar-collapsed');
-      if (sidebarCollapseToggle) {
-        sidebarCollapseToggle.setAttribute('aria-expanded', 'false');
-        sidebarCollapseToggle.setAttribute('aria-label', 'Open sidebar navigation');
-        sidebarCollapseToggle.title = 'Open sidebar navigation';
+  function toggleSidebar() {
+    const isCurrentlyCollapsed = document.documentElement.classList.contains('sidebar-collapsed') ||
+                                 document.body.classList.contains('sidebar-collapsed');
+    setSidebarCollapsed(!isCurrentlyCollapsed);
+  }
+
+  // Sync initial state on load
+  const isInitiallyCollapsed = document.documentElement.classList.contains('sidebar-collapsed');
+  updateToggleButtons(isInitiallyCollapsed);
+
+  if (sidebarCollapseToggle) sidebarCollapseToggle.addEventListener('click', toggleSidebar);
+  if (sidebarToggle) sidebarToggle.addEventListener('click', toggleSidebar);
+  if (sidebarClose) sidebarClose.addEventListener('click', () => setSidebarCollapsed(true));
+  if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', () => setSidebarCollapsed(true));
+
+  // Auto-collapse when clicking nav link on smaller screens
+  document.querySelectorAll('.sidebar-nav a').forEach(link => {
+    link.addEventListener('click', () => {
+      if (window.innerWidth < 992) {
+        setSidebarCollapsed(true);
       }
-    }
-  } catch (e) {}
-
-  function openSidebar() {
-    if (adminSidebar) adminSidebar.classList.add('show');
-    if (sidebarBackdrop) sidebarBackdrop.classList.add('show');
-    document.body.classList.add('sidebar-open');
-    if (sidebarToggle) sidebarToggle.setAttribute('aria-expanded', 'true');
-  }
-
-  function closeSidebar() {
-    if (adminSidebar) adminSidebar.classList.remove('show');
-    if (sidebarBackdrop) sidebarBackdrop.classList.remove('show');
-    document.body.classList.remove('sidebar-open');
-    if (sidebarToggle) sidebarToggle.setAttribute('aria-expanded', 'false');
-  }
-
-  if (sidebarToggle) sidebarToggle.addEventListener('click', openSidebar);
-  if (sidebarCollapseToggle) {
-    sidebarCollapseToggle.addEventListener('click', () => {
-      document.documentElement.classList.add('sidebar-interactive');
-      document.body.classList.add('sidebar-interactive');
-      const isCurrentlyCollapsed = document.documentElement.classList.contains('sidebar-collapsed') || document.body.classList.contains('sidebar-collapsed');
-      setSidebarCollapsed(!isCurrentlyCollapsed);
     });
-  }
-  if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
-  if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeSidebar);
+  });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && adminSidebar && adminSidebar.classList.contains('show')) {
-      closeSidebar();
+    if (e.key === 'Escape') {
+      const isCollapsed = document.documentElement.classList.contains('sidebar-collapsed') ||
+                          document.body.classList.contains('sidebar-collapsed');
+      if (!isCollapsed && window.innerWidth < 992) {
+        setSidebarCollapsed(true);
+      }
     }
   });
 });

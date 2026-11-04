@@ -19,10 +19,10 @@
       <i class="bi bi-calendar3-range me-1"></i> Time Blocks Calendar
     </a>
     {% if user.is_owner %}
-      <form method="post" action="{% url 'services:schedule_list' %}" class="d-inline">
+      <form id="syncShiftsForm" method="post" action="{% url 'services:schedule_list' %}" class="d-inline">
         {% csrf_token %}
         <input type="hidden" name="action" value="sync_time_blocks">
-        <button type="submit" class="btn btn-outline-primary btn-sm" title="Sync shift lunch breaks (12-1pm) and leaves to the visual calendar planner">
+        <button type="submit" id="syncShiftsBtn" class="btn btn-outline-primary btn-sm" title="Sync shift lunch breaks (12-1pm) and leaves to the visual calendar planner">
           <i class="bi bi-arrow-repeat me-1"></i> Sync Shifts to Calendar
         </button>
       </form>
@@ -81,450 +81,1452 @@
   </div>
 </div>
 
-<!-- Categorized View Mode Switcher & Filter Toolbar -->
-<div class="content-card p-3 mb-4">
-  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-    <!-- View Mode Switcher -->
-    <div class="schedule-view-switcher">
-      <a href="?view=roster{% if spec_filter %}&spec={{ spec_filter }}{% endif %}{% if staff_id %}&staff={{ staff_id }}{% endif %}"
-         class="schedule-view-btn {% if view_mode == 'roster' %}active{% endif %}">
-        <i class="bi bi-people-fill"></i> By Technician (Weekly Roster)
-      </a>
-      <a href="?view=daily{% if day_param %}&day={{ day_param }}{% endif %}"
-         class="schedule-view-btn {% if view_mode == 'daily' %}active{% endif %}">
-        <i class="bi bi-calendar-day"></i> By Day (Daily Duty Roster)
-      </a>
-      <a href="?view=table{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if day_param %}&day={{ day_param }}{% endif %}{% if status_param %}&status={{ status_param }}{% endif %}"
-         class="schedule-view-btn {% if view_mode == 'table' %}active{% endif %}">
-        <i class="bi bi-table"></i> All Schedules (Table View)
-      </a>
+<!-- Categorized View Mode Switcher, Search Bar & Filter Toolbar (Zero Reload) -->
+<div class="content-card p-3 mb-4 shadow-sm" style="background: #ffffff; border-radius: 14px;">
+  <div class="row g-3 align-items-center">
+    <!-- Live Search Bar -->
+    <div class="col-12 col-lg-5">
+      <div class="input-group">
+        <span class="input-group-text bg-white border-end-0 text-muted" style="border-radius: 10px 0 0 10px; border-color: #dee2e6;">
+          <i class="bi bi-search text-secondary"></i>
+        </span>
+        <input
+          type="search"
+          id="scheduleSearchInput"
+          class="form-control border-start-0 ps-0"
+          placeholder="Search technician, specialty, day, hours, status..."
+          value="{{ search_param|default:'' }}"
+          autocomplete="off"
+          style="border-radius: 0 10px 10px 0; border-color: #dee2e6;"
+        >
+        <button class="btn btn-outline-secondary border ms-1" type="button" id="scheduleSearchClear" title="Clear search" style="display: none; border-radius: 8px;">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
     </div>
 
-    <!-- Quick Staff Selector -->
-    <form method="get" class="d-flex align-items-center gap-2">
-      <input type="hidden" name="view" value="{{ view_mode }}">
-      {% if spec_filter %}<input type="hidden" name="spec" value="{{ spec_filter }}">{% endif %}
-      <select name="staff" class="form-select form-select-sm" style="min-width: 180px;" onchange="this.form.submit()">
-        <option value="">All Technicians ({{ total_staff_count }})</option>
-        {% for st in staff_list %}
-          <option value="{{ st.pk }}" {% if staff_id == st.pk|stringformat:"s" %}selected{% endif %}>
-            {{ st.get_full_name|default:st.email }}
-          </option>
-        {% endfor %}
-      </select>
-      {% if staff_id or spec_filter %}
-        <a href="?view={{ view_mode }}" class="btn btn-outline-secondary btn-sm" title="Clear Filter">
-          <i class="bi bi-x-circle"></i>
-        </a>
-      {% endif %}
-    </form>
+    <!-- View Mode Switcher (Client-side tabs: Stay on page, zero reload) -->
+    <div class="col-12 col-lg-4 d-flex justify-content-lg-center">
+      <div class="schedule-view-switcher w-100 justify-content-center">
+        <button type="button"
+           id="btnViewRoster"
+           data-view="roster"
+           class="schedule-view-btn {% if view_mode == 'roster' %}active{% endif %}">
+          <i class="bi bi-people-fill"></i> By Technician
+        </button>
+        <button type="button"
+           id="btnViewDaily"
+           data-view="daily"
+           class="schedule-view-btn {% if view_mode == 'daily' %}active{% endif %}">
+          <i class="bi bi-calendar-day"></i> By Day
+        </button>
+        <button type="button"
+           id="btnViewTable"
+           data-view="table"
+           class="schedule-view-btn {% if view_mode == 'table' %}active{% endif %}">
+          <i class="bi bi-table"></i> All Schedules
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Staff Selector (Instant JS Filter) -->
+    <div class="col-12 col-lg-3">
+      <div class="d-flex align-items-center gap-2 justify-content-lg-end">
+        <select id="staffQuickFilter" class="form-select form-select-sm" style="min-width: 170px; border-radius: 10px;">
+          <option value="">All Technicians ({{ total_staff_count }})</option>
+          {% for st in staff_list %}
+            <option value="{{ st.pk }}" {% if staff_id == st.pk|stringformat:"s" %}selected{% endif %}>
+              {{ st.get_full_name|default:st.email }}
+            </option>
+          {% endfor %}
+        </select>
+        <button type="button" id="clearAllFiltersBtn" class="btn btn-outline-secondary btn-sm" title="Reset All Filters" style="display: none; border-radius: 8px;">
+          <i class="bi bi-arrow-counterclockwise"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dynamic Filter Status & Live Search Counter (Zero reload feedback) -->
+  <div id="filterStatusContainer" class="d-flex align-items-center justify-content-between flex-wrap gap-2 pt-2 mt-2 border-top small" style="display: none;">
+    <div class="d-flex align-items-center gap-2 flex-wrap text-muted">
+      <span><i class="bi bi-funnel me-1"></i>Active filters:</span>
+      <span id="searchBadge" class="badge bg-light text-dark border" style="display: none;"></span>
+      <span id="staffBadge" class="badge bg-light text-dark border" style="display: none;"></span>
+      <span id="specBadge" class="badge bg-light text-dark border" style="display: none;"></span>
+    </div>
+    <div>
+      <span id="resultsCountBadge" class="badge bg-brand-subtle text-brand fw-semibold"></span>
+    </div>
   </div>
 </div>
 
-{% if view_mode == 'roster' %}
 <!-- =========================================================================
      VIEW 1: CATEGORIZED BY TECHNICIAN (WEEKLY ROSTER CARDS)
      ========================================================================= -->
-<!-- Department / Specialty Categories Filter -->
-<div class="d-flex flex-wrap align-items-center gap-2 mb-4">
-  <span class="small fw-bold text-muted text-uppercase me-1"><i class="bi bi-funnel me-1"></i>Category:</span>
-  <a href="?view=roster{% if staff_id %}&staff={{ staff_id }}{% endif %}"
-     class="schedule-cat-pill {% if not spec_filter %}active{% endif %}">
-    All Staff ({{ category_counts.all }})
-  </a>
-  <a href="?view=roster&spec=nail_art{% if staff_id %}&staff={{ staff_id }}{% endif %}"
-     class="schedule-cat-pill {% if spec_filter == 'nail_art' %}active{% endif %}">
-    <i class="bi bi-brush"></i> Nail Art & Extensions ({{ category_counts.nail_art }})
-  </a>
-  <a href="?view=roster&spec=spa_lashes{% if staff_id %}&staff={{ staff_id }}{% endif %}"
-     class="schedule-cat-pill {% if spec_filter == 'spa_lashes' %}active{% endif %}">
-    <i class="bi bi-stars"></i> Lashes, Brows & Spa ({{ category_counts.spa_lashes }})
-  </a>
-  <a href="?view=roster&spec=classic_care{% if staff_id %}&staff={{ staff_id }}{% endif %}"
-     class="schedule-cat-pill {% if spec_filter == 'classic_care' %}active{% endif %}">
-    <i class="bi bi-hand-index-thumb"></i> Classic Nail Care ({{ category_counts.classic_care }})
-  </a>
-</div>
-
-<!-- Staff Cards Grid -->
-{% for item in staff_roster %}
-<div class="staff-roster-card">
-  <!-- Card Header -->
-  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 pb-3 border-bottom">
-    <div class="d-flex align-items-center gap-3">
-      <div class="staff-avatar-circle">
-        {{ item.staff.first_name|slice:":1" }}{{ item.staff.last_name|slice:":1"|default:item.staff.email|slice:":1"|upper }}
-      </div>
-      <div>
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-          <h4 class="mb-0 fw-bold fs-5 text-dark">
-            {{ item.staff.get_full_name|default:item.staff.email }}
-          </h4>
-          {% if item.specialty %}
-            <span class="badge text-bg-light border small text-secondary">
-              <i class="bi bi-award me-1 text-primary"></i>{{ item.specialty }}
-            </span>
-          {% endif %}
-        </div>
-        <div class="text-muted small mt-1">
-          <i class="bi bi-envelope me-1"></i>{{ item.staff.email }}
-          <span class="mx-2">&bull;</span>
-          <i class="bi bi-clock me-1 text-muted"></i>Standard Shift: <strong>{{ item.default_hours }}</strong>
-        </div>
-      </div>
-    </div>
-
-    <!-- Summary Badges & Quick Action -->
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-      <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
-        <i class="bi bi-check-circle me-1"></i>{{ item.working_count }} Working Days
-      </span>
-      {% if item.off_days %}
-        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
-          <i class="bi bi-moon-stars me-1"></i>Day Off: <strong>{{ item.off_day_str }}</strong>
-        </span>
-      {% endif %}
-    </div>
+<div id="viewModeRoster" class="schedule-view-section {% if view_mode != 'roster' %}d-none{% endif %}">
+  <!-- Department / Specialty Categories Filter (Instant JS toggle) -->
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-4">
+    <span class="small fw-bold text-muted text-uppercase me-1"><i class="bi bi-funnel me-1"></i>Category:</span>
+    <button type="button"
+       data-spec=""
+       class="schedule-cat-pill {% if not spec_filter %}active{% endif %}">
+      All Staff ({{ category_counts.all }})
+    </button>
+    <button type="button"
+       data-spec="nail_art"
+       class="schedule-cat-pill {% if spec_filter == 'nail_art' %}active{% endif %}">
+      <i class="bi bi-brush"></i> Nail Art & Extensions ({{ category_counts.nail_art }})
+    </button>
+    <button type="button"
+       data-spec="spa_lashes"
+       class="schedule-cat-pill {% if spec_filter == 'spa_lashes' %}active{% endif %}">
+      <i class="bi bi-stars"></i> Lashes, Brows & Spa ({{ category_counts.spa_lashes }})
+    </button>
+    <button type="button"
+       data-spec="classic_care"
+       class="schedule-cat-pill {% if spec_filter == 'classic_care' %}active{% endif %}">
+      <i class="bi bi-hand-index-thumb"></i> Classic Nail Care ({{ category_counts.classic_care }})
+    </button>
   </div>
 
-  <!-- Weekly 7-Day Matrix Strip -->
-  <div class="staff-week-grid">
-    {% for sched in item.schedules %}
-      {% if sched.is_working %}
-        <a href="{% url 'services:schedule_update' sched.pk %}" class="staff-day-cell is-working" title="Edit schedule for {{ sched.get_day_of_week_display }}">
+  <!-- Staff Cards Grid -->
+  <div id="staffRosterContainer">
+    {% for item in staff_roster %}
+    <div class="staff-roster-card"
+         data-staff-id="{{ item.staff.id }}"
+         data-staff-name="{{ item.staff.get_full_name|default:item.staff.email }}"
+         data-category="{{ item.spec_category }}"
+         data-categories="{{ item.spec_categories_str }}"
+         data-specialty="{{ item.specialty }}"
+         data-search-text="{{ item.staff.get_full_name|lower }} {{ item.staff.email|lower }} {{ item.specialty|lower }} {{ item.spec_category_label|lower }} {{ item.default_hours|lower }} {{ item.off_day_str|lower }} {{ item.working_count }} working">
+      <!-- Card Header -->
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 pb-3 border-bottom">
+        <div class="d-flex align-items-center gap-3">
+          <div class="staff-avatar-circle">
+            {{ item.staff.first_name|slice:":1" }}{{ item.staff.last_name|slice:":1"|default:item.staff.email|slice:":1"|upper }}
+          </div>
           <div>
-            <div class="staff-day-title">{{ sched.get_day_of_week_display|slice:":3" }}</div>
-            <div class="staff-day-hours">{{ sched.start_time|time:"g:i A" }} - {{ sched.end_time|time:"g:i A" }}</div>
-            <div class="staff-day-lunch">
-              <i class="bi bi-cup-hot me-1"></i>{{ sched.lunch_start|time:"g:i" }}-{{ sched.lunch_end|time:"g:i A" }}
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <h4 class="mb-0 fw-bold fs-5 text-dark">
+                {{ item.staff.get_full_name|default:item.staff.email }}
+              </h4>
+              {% if item.specialty %}
+                <span class="badge text-bg-light border small text-secondary">
+                  <i class="bi bi-award me-1 text-primary"></i>{{ item.specialty }}
+                </span>
+              {% endif %}
+            </div>
+            <div class="text-muted small mt-1">
+              <i class="bi bi-envelope me-1"></i>{{ item.staff.email }}
+              <span class="mx-2">&bull;</span>
+              <i class="bi bi-clock me-1 text-muted"></i>Standard Shift: <strong>{{ item.default_hours }}</strong>
             </div>
           </div>
-          <div>
-            <span class="badge bg-success text-white" style="font-size: 0.68rem; font-weight: 600;">
-              <i class="bi bi-check-circle me-1"></i>Duty
-            </span>
-            <div class="staff-day-edit-hint"><i class="bi bi-pencil me-1"></i>Edit</div>
+        </div>
+
+        <!-- Summary Badges -->
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 working-days-badge">
+            <i class="bi bi-check-circle me-1"></i><span class="badge-count">{{ item.working_count }}</span> Working Days
+          </span>
+          <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 off-days-badge" {% if not item.off_days %}style="display: none;"{% endif %}>
+            <i class="bi bi-moon-stars me-1"></i>Day Off: <strong class="badge-off-str">{{ item.off_day_str }}</strong>
+          </span>
+        </div>
+      </div>
+
+      <!-- Weekly 7-Day Matrix Strip -->
+      <div class="staff-week-grid">
+        {% for sched in item.schedules %}
+          <div class="staff-day-cell {% if sched.is_working %}is-working{% else %}is-off{% endif %}"
+               role="button"
+               tabindex="0"
+               data-sched-id="{{ sched.pk }}"
+               data-staff-id="{{ sched.staff.id }}"
+               data-staff-name="{{ sched.staff.get_full_name|default:sched.staff.email }}"
+               data-day-code="{{ sched.day_of_week }}"
+               data-day-name="{{ sched.get_day_of_week_display }}"
+               data-is-working="{{ sched.is_working|yesno:'true,false' }}"
+               data-start-time="{{ sched.start_time|time:'H:i' }}"
+               data-end-time="{{ sched.end_time|time:'H:i' }}"
+               data-lunch-start="{{ sched.lunch_start|time:'H:i' }}"
+               data-lunch-end="{{ sched.lunch_end|time:'H:i' }}"
+               data-edit-url="{% url 'services:schedule_update' sched.pk %}"
+               title="{% if user.is_owner %}Click to quick-edit shift for {{ sched.get_day_of_week_display }}{% else %}{{ sched.get_day_of_week_display }} Shift{% endif %}">
+            <div>
+              <div class="staff-day-title">{{ sched.get_day_of_week_display|slice:":3" }}</div>
+              <div class="staff-day-hours {% if not sched.is_working %}text-danger{% endif %}">
+                {% if sched.is_working %}
+                  {{ sched.start_time|time:"g:i A" }} - {{ sched.end_time|time:"g:i A" }}
+                {% else %}
+                  Off Duty
+                {% endif %}
+              </div>
+              <div class="staff-day-lunch" {% if not sched.is_working %}style="display: none;"{% endif %}>
+                <i class="bi bi-cup-hot me-1"></i><span class="lunch-text">{{ sched.lunch_start|time:"g:i" }}-{{ sched.lunch_end|time:"g:i A" }}</span>
+              </div>
+              <small class="text-muted staff-day-off-sub" style="font-size: 0.72rem; {% if sched.is_working %}display: none;{% endif %}">Leave Day</small>
+            </div>
+            <div>
+              <span class="badge {% if sched.is_working %}bg-success{% else %}bg-danger{% endif %} text-white staff-day-badge" style="font-size: 0.68rem; font-weight: 600;">
+                {% if sched.is_working %}
+                  <i class="bi bi-check-circle me-1"></i>Duty
+                {% else %}
+                  <i class="bi bi-moon-stars me-1"></i>Day Off (Leave)
+                {% endif %}
+              </span>
+              {% if user.is_owner %}
+                <div class="staff-day-edit-hint"><i class="bi bi-pencil me-1"></i>Edit</div>
+              {% endif %}
+            </div>
           </div>
-        </a>
-      {% else %}
-        <a href="{% url 'services:schedule_update' sched.pk %}" class="staff-day-cell is-off" title="Edit schedule for {{ sched.get_day_of_week_display }}">
-          <div>
-            <div class="staff-day-title">{{ sched.get_day_of_week_display|slice:":3" }}</div>
-            <div class="staff-day-hours text-danger">Off Duty</div>
-            <small class="text-muted" style="font-size: 0.72rem;">Leave Day</small>
-          </div>
-          <div>
-            <span class="badge bg-danger text-white" style="font-size: 0.68rem; font-weight: 700;">
-              <i class="bi bi-moon-stars me-1"></i>Day Off (Leave)
-            </span>
-            <div class="staff-day-edit-hint"><i class="bi bi-pencil me-1"></i>Edit</div>
-          </div>
-        </a>
-      {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% empty %}
+    <div class="content-card text-center py-5">
+      <div class="text-muted fs-1 mb-2"><i class="bi bi-person-x"></i></div>
+      <h5>No staff members found</h5>
+      <p class="text-muted small">No staff profiles are currently active in the system.</p>
+    </div>
     {% endfor %}
   </div>
-</div>
-{% empty %}
-<div class="content-card text-center py-5">
-  <div class="text-muted fs-1 mb-2"><i class="bi bi-person-x"></i></div>
-  <h5>No staff members match the selected filter</h5>
-  <p class="text-muted small">Try resetting your filter to view all technician schedules.</p>
-  <a href="?view=roster" class="btn btn-outline-brand btn-sm">Reset Filters</a>
-</div>
-{% endfor %}
 
-{% elif view_mode == 'daily' %}
+  <!-- Empty state for search/filter results -->
+  <div id="rosterEmptySearch" class="content-card text-center py-5" style="display: none;">
+    <div class="text-muted fs-1 mb-2"><i class="bi bi-search"></i></div>
+    <h5 class="fw-bold">No technicians match your search</h5>
+    <p class="text-muted small mb-3">Try adjusting your keywords, category filter, or technician selection.</p>
+    <button type="button" class="btn btn-outline-brand btn-sm" onclick="resetAllScheduleFilters()">
+      <i class="bi bi-arrow-counterclockwise me-1"></i> Clear Search & Filters
+    </button>
+  </div>
+</div>
+
 <!-- =========================================================================
      VIEW 2: CATEGORIZED BY DAY OF THE WEEK (DAILY DUTY SCHEDULE)
      ========================================================================= -->
-<!-- Day of Week Selector Bar -->
-<div class="duty-day-picker-bar">
+<div id="viewModeDaily" class="schedule-view-section {% if view_mode != 'daily' %}d-none{% endif %}">
+  <!-- Day of Week Selector Bar (Instant JS switch: Zero reload) -->
+  <div class="duty-day-picker-bar">
+    {% for d in days_summary %}
+      <button type="button"
+              class="duty-day-pill {% if d.is_selected %}active{% endif %}"
+              data-day-code="{{ d.code }}"
+              data-day-label="{{ d.label }}"
+              title="Show duty roster for {{ d.label }}">
+        <span class="duty-day-name">
+          {{ d.label }}
+          {% if d.is_today %}<span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">Today</span>{% endif %}
+        </span>
+        <span class="duty-day-sub">
+          <i class="bi bi-check-circle me-1 text-success"></i><span class="day-working-num">{{ d.working_count }}</span> Working &bull; <i class="bi bi-moon-stars text-danger"></i><span class="day-off-num">{{ d.off_count }}</span> Off
+        </span>
+      </button>
+    {% endfor %}
+  </div>
+
+  <!-- Daily Panels for all 7 Days (Pre-rendered for instantaneous zero-reload switching) -->
   {% for d in days_summary %}
-    <a href="?view=daily&day={{ d.code }}" class="duty-day-pill {% if d.is_selected %}active{% endif %}">
-      <span class="duty-day-name">
-        {{ d.label }}
-        {% if d.is_today %}<span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">Today</span>{% endif %}
-      </span>
-      <span class="duty-day-sub">
-        <i class="bi bi-check-circle me-1 text-success"></i>{{ d.working_count }} Working &bull; <i class="bi bi-moon-stars text-danger"></i>{{ d.off_count }} Off
-      </span>
-    </a>
+    <div class="daily-day-panel {% if not d.is_selected %}d-none{% endif %}" id="dailyPanel_{{ d.code }}" data-day-code="{{ d.code }}" data-day-label="{{ d.label }}">
+      <!-- Selected Day Heading -->
+      <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div>
+          <h4 class="fw-bold mb-0 text-dark">
+            <i class="bi bi-calendar-event me-2 text-brand"></i>{{ d.label }} Duty Roster
+          </h4>
+          <small class="text-muted">Active technician shifts and scheduled leaves for {{ d.label }}.</small>
+        </div>
+        <div class="d-flex gap-2">
+          <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+            <i class="bi bi-people-fill me-1"></i><span class="panel-duty-count">{{ d.on_duty|length }}</span> Technicians on Duty
+          </span>
+          <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2">
+            <i class="bi bi-moon-stars me-1"></i><span class="panel-off-count">{{ d.off_duty|length }}</span> on Day Off
+          </span>
+        </div>
+      </div>
+
+      <!-- Section 1: Technicians ON DUTY -->
+      <div class="mb-4">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <span class="badge bg-success text-white rounded-pill px-3 py-1 fw-bold">
+            <i class="bi bi-check-circle me-1"></i>ON DUTY (<span class="section-duty-count">{{ d.on_duty|length }}</span>)
+          </span>
+          <span class="small text-muted">Technicians scheduled to accept appointment and walk-in clients.</span>
+        </div>
+
+        <div class="row g-3 daily-on-duty-grid">
+          {% for sched in d.on_duty %}
+          <div class="col-12 col-md-6 col-lg-4 daily-duty-card-wrapper"
+               data-staff-id="{{ sched.staff.id }}"
+               data-sched-id="{{ sched.pk }}"
+               data-search-text="{{ sched.staff.get_full_name|lower }} {{ sched.staff.email|lower }} {{ sched.staff.staff_profile.specialty|lower }} {{ sched.start_time|time:'g:i A'|lower }} {{ sched.end_time|time:'g:i A'|lower }} {{ sched.lunch_start|time:'g:i A'|lower }} {{ sched.lunch_end|time:'g:i A'|lower }} working duty on duty">
+            <div class="duty-staff-card border-start border-4 border-success">
+              <div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="staff-avatar-circle" style="width: 36px; height: 36px; font-size: 0.88rem;">
+                      {{ sched.staff.first_name|slice:":1" }}{{ sched.staff.last_name|slice:":1"|default:sched.staff.email|slice:":1"|upper }}
+                    </div>
+                    <div>
+                      <strong class="d-block text-dark">{{ sched.staff.get_full_name|default:sched.staff.email }}</strong>
+                      <small class="text-muted font-monospace" style="font-size: 0.75rem;">{{ sched.staff.email }}</small>
+                    </div>
+                  </div>
+                  <span class="badge bg-success text-white" style="font-size: 0.72rem;">Working</span>
+                </div>
+
+                {% if sched.staff.staff_profile.specialty %}
+                  <div class="mb-2">
+                    <span class="badge text-bg-light border text-truncate d-inline-block small" style="max-width: 100%;">
+                      {{ sched.staff.staff_profile.specialty }}
+                    </span>
+                  </div>
+                {% endif %}
+
+                <div class="bg-light p-2 rounded small text-secondary mb-2">
+                  <div class="d-flex justify-content-between mb-1">
+                    <span><i class="bi bi-clock me-1 text-primary"></i>Shift Hours:</span>
+                    <strong class="text-dark">{{ sched.start_time|time:"g:i A" }} - {{ sched.end_time|time:"g:i A" }}</strong>
+                  </div>
+                  <div class="d-flex justify-content-between">
+                    <span><i class="bi bi-cup-hot me-1 text-warning-emphasis"></i>Lunch Break:</span>
+                    <span class="text-dark">{{ sched.lunch_start|time:"g:i A" }} - {{ sched.lunch_end|time:"g:i A" }}</span>
+                  </div>
+                </div>
+              </div>
+
+              {% if user.is_owner %}
+              <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+                <button type="button"
+                        class="btn btn-sm btn-outline-dark btn-quick-edit"
+                        data-sched-id="{{ sched.pk }}"
+                        data-staff-id="{{ sched.staff.id }}"
+                        data-staff-name="{{ sched.staff.get_full_name|default:sched.staff.email }}"
+                        data-day-code="{{ sched.day_of_week }}"
+                        data-day-name="{{ sched.get_day_of_week_display }}"
+                        data-is-working="{{ sched.is_working|yesno:'true,false' }}"
+                        data-start-time="{{ sched.start_time|time:'H:i' }}"
+                        data-end-time="{{ sched.end_time|time:'H:i' }}"
+                        data-lunch-start="{{ sched.lunch_start|time:'H:i' }}"
+                        data-lunch-end="{{ sched.lunch_end|time:'H:i' }}"
+                        data-edit-url="{% url 'services:schedule_update' sched.pk %}">
+                  <i class="bi bi-pencil me-1"></i>Edit Shift
+                </button>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="col-12 empty-duty-alert">
+            <div class="alert alert-secondary text-center py-4">
+              No technicians on duty for this day.
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Section 2: Technicians ON DAY OFF (LEAVE) -->
+      <div>
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <span class="badge bg-danger text-white rounded-pill px-3 py-1 fw-bold">
+            <i class="bi bi-moon-stars me-1"></i>DAY OFF / LEAVE (<span class="section-off-count">{{ d.off_duty|length }}</span>)
+          </span>
+          <span class="small text-muted">Staff scheduled for their weekly rest day or leave.</span>
+        </div>
+
+        <div class="row g-3 daily-off-duty-grid">
+          {% for sched in d.off_duty %}
+          <div class="col-12 col-md-6 col-lg-4 daily-off-card-wrapper"
+               data-staff-id="{{ sched.staff.id }}"
+               data-sched-id="{{ sched.pk }}"
+               data-search-text="{{ sched.staff.get_full_name|lower }} {{ sched.staff.email|lower }} {{ sched.staff.staff_profile.specialty|lower }} day off leave rest off duty">
+            <div class="duty-staff-card is-off border-start border-4 border-danger">
+              <div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="staff-avatar-circle" style="width: 36px; height: 36px; font-size: 0.88rem; background: #cbd5e1; color: #475569;">
+                      {{ sched.staff.first_name|slice:":1" }}{{ sched.staff.last_name|slice:":1"|default:sched.staff.email|slice:":1"|upper }}
+                    </div>
+                    <div>
+                      <strong class="d-block text-dark">{{ sched.staff.get_full_name|default:sched.staff.email }}</strong>
+                      <small class="text-muted font-monospace" style="font-size: 0.75rem;">{{ sched.staff.email }}</small>
+                    </div>
+                  </div>
+                  <span class="badge bg-danger text-white" style="font-size: 0.72rem;">Day Off</span>
+                </div>
+
+                {% if sched.staff.staff_profile.specialty %}
+                  <div class="mb-2">
+                    <span class="badge text-bg-light border text-truncate d-inline-block small" style="max-width: 100%;">
+                      {{ sched.staff.staff_profile.specialty }}
+                    </span>
+                  </div>
+                {% endif %}
+
+                <div class="p-2 rounded small text-danger-emphasis mb-2" style="background: rgba(239, 68, 68, 0.08);">
+                  <i class="bi bi-info-circle me-1"></i>Designated weekly rest day (no client booking slots).
+                </div>
+              </div>
+
+              {% if user.is_owner %}
+              <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+                <button type="button"
+                        class="btn btn-sm btn-outline-danger btn-quick-edit"
+                        data-sched-id="{{ sched.pk }}"
+                        data-staff-id="{{ sched.staff.id }}"
+                        data-staff-name="{{ sched.staff.get_full_name|default:sched.staff.email }}"
+                        data-day-code="{{ sched.day_of_week }}"
+                        data-day-name="{{ sched.get_day_of_week_display }}"
+                        data-is-working="{{ sched.is_working|yesno:'true,false' }}"
+                        data-start-time="{{ sched.start_time|time:'H:i' }}"
+                        data-end-time="{{ sched.end_time|time:'H:i' }}"
+                        data-lunch-start="{{ sched.lunch_start|time:'H:i' }}"
+                        data-lunch-end="{{ sched.lunch_end|time:'H:i' }}"
+                        data-edit-url="{% url 'services:schedule_update' sched.pk %}">
+                  <i class="bi bi-arrow-repeat me-1"></i>Edit / Set Working
+                </button>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="col-12 empty-off-alert">
+            <div class="alert alert-light border text-center py-3 text-muted">
+              All staff are on duty today. No scheduled leaves.
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Empty state when search filters hide all cards for this day -->
+      <div class="daily-empty-search text-center py-4 content-card mt-3" style="display: none;">
+        <i class="bi bi-search text-muted fs-3 mb-2 d-block"></i>
+        <h6>No technicians match your search on {{ d.label }}</h6>
+        <p class="text-muted small mb-0">Try clearing your search query or technician filter.</p>
+      </div>
+    </div>
   {% endfor %}
 </div>
 
-<!-- Selected Day Heading -->
-<div class="d-flex align-items-center justify-content-between mb-3">
-  <div>
-    <h4 class="fw-bold mb-0 text-dark">
-      <i class="bi bi-calendar-event me-2 text-brand"></i>{{ selected_day_label }} Duty Roster
-    </h4>
-    <small class="text-muted">Active technician shifts and scheduled leaves for {{ selected_day_label }}.</small>
-  </div>
-  <div class="d-flex gap-2">
-    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
-      <i class="bi bi-people-fill me-1"></i>{{ daily_on_duty|length }} Technicians on Duty
-    </span>
-    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2">
-      <i class="bi bi-moon-stars me-1"></i>{{ daily_off_duty|length }} on Day Off
-    </span>
-  </div>
-</div>
-
-<!-- Section 1: Technicians ON DUTY -->
-<div class="mb-4">
-  <div class="d-flex align-items-center gap-2 mb-3">
-    <span class="badge bg-success text-white rounded-pill px-3 py-1 fw-bold">
-      <i class="bi bi-check-circle me-1"></i>ON DUTY ({{ daily_on_duty|length }})
-    </span>
-    <span class="small text-muted">Technicians scheduled to accept appointment and walk-in clients.</span>
-  </div>
-
-  <div class="row g-3">
-    {% for sched in daily_on_duty %}
-    <div class="col-12 col-md-6 col-lg-4">
-      <div class="duty-staff-card border-start border-4 border-success">
-        <div>
-          <div class="d-flex align-items-center justify-content-between mb-2">
-            <div class="d-flex align-items-center gap-2">
-              <div class="staff-avatar-circle" style="width: 36px; height: 36px; font-size: 0.88rem;">
-                {{ sched.staff.first_name|slice:":1" }}{{ sched.staff.last_name|slice:":1"|default:sched.staff.email|slice:":1"|upper }}
-              </div>
-              <div>
-                <strong class="d-block text-dark">{{ sched.staff.get_full_name|default:sched.staff.email }}</strong>
-                <small class="text-muted font-monospace" style="font-size: 0.75rem;">{{ sched.staff.email }}</small>
-              </div>
-            </div>
-            <span class="badge bg-success text-white" style="font-size: 0.72rem;">Working</span>
-          </div>
-
-          {% if sched.staff.staff_profile.specialty %}
-            <div class="mb-2">
-              <span class="badge text-bg-light border text-truncate d-inline-block small" style="max-width: 100%;">
-                {{ sched.staff.staff_profile.specialty }}
-              </span>
-            </div>
-          {% endif %}
-
-          <div class="bg-light p-2 rounded small text-secondary mb-2">
-            <div class="d-flex justify-content-between mb-1">
-              <span><i class="bi bi-clock me-1 text-primary"></i>Shift Hours:</span>
-              <strong class="text-dark">{{ sched.start_time|time:"g:i A" }} - {{ sched.end_time|time:"g:i A" }}</strong>
-            </div>
-            <div class="d-flex justify-content-between">
-              <span><i class="bi bi-cup-hot me-1 text-warning-emphasis"></i>Lunch Break:</span>
-              <span class="text-dark">{{ sched.lunch_start|time:"g:i A" }} - {{ sched.lunch_end|time:"g:i A" }}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="d-flex justify-content-end gap-2 pt-2 border-top">
-          <a href="{% url 'services:schedule_update' sched.pk %}" class="btn btn-sm btn-outline-dark">
-            <i class="bi bi-pencil me-1"></i>Edit Shift
-          </a>
-        </div>
-      </div>
-    </div>
-    {% empty %}
-    <div class="col-12">
-      <div class="alert alert-secondary text-center py-4">
-        No technicians on duty for this day.
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-
-<!-- Section 2: Technicians ON DAY OFF (LEAVE) -->
-<div>
-  <div class="d-flex align-items-center gap-2 mb-3">
-    <span class="badge bg-danger text-white rounded-pill px-3 py-1 fw-bold">
-      <i class="bi bi-moon-stars me-1"></i>DAY OFF / LEAVE ({{ daily_off_duty|length }})
-    </span>
-    <span class="small text-muted">Staff scheduled for their weekly rest day or leave.</span>
-  </div>
-
-  <div class="row g-3">
-    {% for sched in daily_off_duty %}
-    <div class="col-12 col-md-6 col-lg-4">
-      <div class="duty-staff-card is-off border-start border-4 border-danger">
-        <div>
-          <div class="d-flex align-items-center justify-content-between mb-2">
-            <div class="d-flex align-items-center gap-2">
-              <div class="staff-avatar-circle" style="width: 36px; height: 36px; font-size: 0.88rem; background: #cbd5e1; color: #475569;">
-                {{ sched.staff.first_name|slice:":1" }}{{ sched.staff.last_name|slice:":1"|default:sched.staff.email|slice:":1"|upper }}
-              </div>
-              <div>
-                <strong class="d-block text-dark">{{ sched.staff.get_full_name|default:sched.staff.email }}</strong>
-                <small class="text-muted font-monospace" style="font-size: 0.75rem;">{{ sched.staff.email }}</small>
-              </div>
-            </div>
-            <span class="badge bg-danger text-white" style="font-size: 0.72rem;">Day Off</span>
-          </div>
-
-          {% if sched.staff.staff_profile.specialty %}
-            <div class="mb-2">
-              <span class="badge text-bg-light border text-truncate d-inline-block small" style="max-width: 100%;">
-                {{ sched.staff.staff_profile.specialty }}
-              </span>
-            </div>
-          {% endif %}
-
-          <div class="p-2 rounded small text-danger-emphasis mb-2" style="background: rgba(239, 68, 68, 0.08);">
-            <i class="bi bi-info-circle me-1"></i>Designated weekly rest day (no client booking slots).
-          </div>
-        </div>
-
-        <div class="d-flex justify-content-end gap-2 pt-2 border-top">
-          <a href="{% url 'services:schedule_update' sched.pk %}" class="btn btn-sm btn-outline-danger">
-            <i class="bi bi-arrow-repeat me-1"></i>Edit / Set Working
-          </a>
-        </div>
-      </div>
-    </div>
-    {% empty %}
-    <div class="col-12">
-      <div class="alert alert-light border text-center py-3 text-muted">
-        All staff are on duty today. No scheduled leaves.
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-
-{% elif view_mode == 'table' %}
 <!-- =========================================================================
-     VIEW 3: DETAILED TABLE VIEW (WITH FILTERS & PAGINATION)
+     VIEW 3: DETAILED TABLE VIEW (WITH INSTANT CLIENT-SIDE FILTERING & SEARCH)
      ========================================================================= -->
-<!-- Filter Toolbar -->
-<form class="content-card p-3 mb-4" method="get">
-  <input type="hidden" name="view" value="table">
-  <div class="row g-2 align-items-end">
-    <div class="col-12 col-sm-6 col-md-4">
-      <label class="form-label small fw-bold text-secondary mb-1">Technician</label>
-      <select name="staff" class="form-select form-select-sm">
-        <option value="">All Technicians</option>
-        {% for st in staff_list %}
-          <option value="{{ st.pk }}" {% if staff_id == st.pk|stringformat:"s" %}selected{% endif %}>
-            {{ st.get_full_name|default:st.email }}
-          </option>
-        {% endfor %}
-      </select>
-    </div>
+<div id="viewModeTable" class="schedule-view-section {% if view_mode != 'table' %}d-none{% endif %}">
+  <!-- Filter Toolbar (Instant JS Filter: Zero reload) -->
+  <div class="content-card p-3 mb-4 shadow-sm" style="background: #ffffff; border-radius: 14px;">
+    <div class="row g-2 align-items-end">
+      <div class="col-12 col-sm-6 col-md-4">
+        <label class="form-label small fw-bold text-secondary mb-1">Technician</label>
+        <select id="tableStaffFilter" class="form-select form-select-sm">
+          <option value="">All Technicians</option>
+          {% for st in staff_list %}
+            <option value="{{ st.pk }}" {% if staff_id == st.pk|stringformat:"s" %}selected{% endif %}>
+              {{ st.get_full_name|default:st.email }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
 
-    <div class="col-12 col-sm-6 col-md-3">
-      <label class="form-label small fw-bold text-secondary mb-1">Day of Week</label>
-      <select name="day" class="form-select form-select-sm">
-        <option value="">All Days (Mon - Sun)</option>
-        {% for code, label in day_choices %}
-          <option value="{{ code }}" {% if day_param == code|stringformat:"s" %}selected{% endif %}>
-            {{ label }}
-          </option>
-        {% endfor %}
-      </select>
-    </div>
+      <div class="col-12 col-sm-6 col-md-3">
+        <label class="form-label small fw-bold text-secondary mb-1">Day of Week</label>
+        <select id="tableDayFilter" class="form-select form-select-sm">
+          <option value="">All Days (Mon - Sun)</option>
+          {% for code, label in day_choices %}
+            <option value="{{ code }}" {% if day_param == code|stringformat:"s" %}selected{% endif %}>
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
 
-    <div class="col-12 col-sm-6 col-md-3">
-      <label class="form-label small fw-bold text-secondary mb-1">Shift Status</label>
-      <select name="status" class="form-select form-select-sm">
-        <option value="">All Shifts (Working & Leave)</option>
-        <option value="working" {% if status_param == 'working' %}selected{% endif %}>Working Shifts Only</option>
-        <option value="leave" {% if status_param == 'leave' or status_param == 'off' %}selected{% endif %}>Day Off / Leave Only</option>
-      </select>
-    </div>
+      <div class="col-12 col-sm-6 col-md-3">
+        <label class="form-label small fw-bold text-secondary mb-1">Shift Status</label>
+        <select id="tableStatusFilter" class="form-select form-select-sm">
+          <option value="">All Shifts (Working & Leave)</option>
+          <option value="working" {% if status_param == 'working' %}selected{% endif %}>Working Shifts Only</option>
+          <option value="leave" {% if status_param == 'leave' or status_param == 'off' %}selected{% endif %}>Day Off / Leave Only</option>
+        </select>
+      </div>
 
-    <div class="col-12 col-sm-6 col-md-2 d-flex gap-2">
-      <button class="btn btn-brand btn-sm w-100" type="submit">
-        <i class="bi bi-funnel me-1"></i> Filter
-      </button>
-      <a class="btn btn-outline-secondary btn-sm" href="?view=table" title="Reset Filters">
-        Reset
-      </a>
+      <div class="col-12 col-sm-6 col-md-2 d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm w-100" type="button" id="tableResetFiltersBtn" title="Reset table filters">
+          <i class="bi bi-arrow-counterclockwise me-1"></i> Reset
+        </button>
+      </div>
     </div>
   </div>
-</form>
 
-<div class="content-card">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead class="table-light">
-        <tr>
-          <th scope="col">Technician / Staff</th>
-          <th scope="col">Day of Week</th>
-          <th scope="col">Shift Hours</th>
-          <th scope="col">Lunch Break</th>
-          <th scope="col">Status</th>
-          <th scope="col" class="text-end">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for sched in page_obj %}
-          <tr {% if not sched.is_working %}class="table-light"{% endif %}>
-            <td>
-              <strong>{{ sched.staff.get_full_name|default:sched.staff.email }}</strong>
-              {% if sched.staff.staff_profile.specialty %}
-                <span class="badge text-bg-light border ms-1 small">{{ sched.staff.staff_profile.specialty }}</span>
-              {% endif %}
-              <br><small class="text-secondary">{{ sched.staff.email }}</small>
-            </td>
-            <td>
-              <strong class="d-block">{{ sched.get_day_of_week_display }}</strong>
-            </td>
-            <td>
-              {% if sched.is_working %}
-                <span class="badge text-bg-light border">
-                  <i class="bi bi-clock me-1 text-muted"></i> {{ sched.start_time|time:"g:i A" }} - {{ sched.end_time|time:"g:i A" }}
-                </span>
-              {% else %}
-                <span class="text-secondary small fst-italic">Off Duty</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if sched.is_working %}
-                {% if sched.lunch_start and sched.lunch_end %}
-                  <span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle">
-                    <i class="bi bi-cup-hot me-1"></i> {{ sched.lunch_start|time:"g:i A" }} - {{ sched.lunch_end|time:"g:i A" }}
+  <div class="content-card shadow-sm" style="background: #ffffff; border-radius: 14px; overflow: hidden;">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" id="schedulesTable">
+        <thead class="table-light">
+          <tr>
+            <th scope="col">Technician / Staff</th>
+            <th scope="col">Day of Week</th>
+            <th scope="col">Shift Hours</th>
+            <th scope="col">Lunch Break</th>
+            <th scope="col">Status</th>
+            <th scope="col" class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sched in all_table_schedules %}
+            <tr class="table-sched-row {% if not sched.is_working %}table-light{% endif %}"
+                data-sched-id="{{ sched.pk }}"
+                data-staff-id="{{ sched.staff.id }}"
+                data-day="{{ sched.day_of_week }}"
+                data-status="{% if sched.is_working %}working{% else %}leave{% endif %}"
+                data-search-text="{{ sched.staff.get_full_name|lower }} {{ sched.staff.email|lower }} {{ sched.staff.staff_profile.specialty|lower }} {{ sched.get_day_of_week_display|lower }} {{ sched.start_time|time:'g:i A'|lower }} {{ sched.end_time|time:'g:i A'|lower }} {% if sched.is_working %}working duty{% else %}off leave day off{% endif %}">
+              <td>
+                <strong class="row-staff-name">{{ sched.staff.get_full_name|default:sched.staff.email }}</strong>
+                {% if sched.staff.staff_profile.specialty %}
+                  <span class="badge text-bg-light border ms-1 small">{{ sched.staff.staff_profile.specialty }}</span>
+                {% endif %}
+                <br><small class="text-secondary">{{ sched.staff.email }}</small>
+              </td>
+              <td>
+                <strong class="d-block row-day-name">{{ sched.get_day_of_week_display }}</strong>
+              </td>
+              <td class="row-hours-cell">
+                {% if sched.is_working %}
+                  <span class="badge text-bg-light border">
+                    <i class="bi bi-clock me-1 text-muted"></i> {{ sched.start_time|time:"g:i A" }} - {{ sched.end_time|time:"g:i A" }}
                   </span>
                 {% else %}
-                  <span class="text-muted small">12:00 PM - 01:00 PM</span>
+                  <span class="text-secondary small fst-italic">Off Duty</span>
                 {% endif %}
-              {% else %}
-                <span class="text-muted small">&mdash;</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if sched.is_working %}
-                <span class="badge text-bg-success">
-                  <i class="bi bi-check-circle me-1"></i> Working
-                </span>
-              {% else %}
-                <span class="badge text-bg-danger-subtle text-danger border border-danger-subtle">
-                  <i class="bi bi-moon-stars me-1"></i> Day Off (Leave)
-                </span>
-              {% endif %}
-            </td>
-            <td class="text-end text-nowrap">
-              {% if user.is_owner %}
-                <a class="btn btn-sm btn-outline-dark" href="{% url 'services:schedule_update' sched.pk %}">Edit</a>
-                <a class="btn btn-sm btn-outline-danger" href="{% url 'services:schedule_delete' sched.pk %}">Delete</a>
-              {% else %}
-                <span class="badge text-bg-light border text-muted">Active Shift</span>
-              {% endif %}
+              </td>
+              <td class="row-lunch-cell">
+                {% if sched.is_working %}
+                  {% if sched.lunch_start and sched.lunch_end %}
+                    <span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                      <i class="bi bi-cup-hot me-1"></i> {{ sched.lunch_start|time:"g:i A" }} - {{ sched.lunch_end|time:"g:i A" }}
+                    </span>
+                  {% else %}
+                    <span class="text-muted small">12:00 PM - 01:00 PM</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="row-status-cell">
+                {% if sched.is_working %}
+                  <span class="badge text-bg-success">
+                    <i class="bi bi-check-circle me-1"></i> Working
+                  </span>
+                {% else %}
+                  <span class="badge text-bg-danger-subtle text-danger border border-danger-subtle">
+                    <i class="bi bi-moon-stars me-1"></i> Day Off (Leave)
+                  </span>
+                {% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                {% if user.is_owner %}
+                  <button type="button"
+                          class="btn btn-sm btn-outline-dark btn-quick-edit me-1"
+                          data-sched-id="{{ sched.pk }}"
+                          data-staff-id="{{ sched.staff.id }}"
+                          data-staff-name="{{ sched.staff.get_full_name|default:sched.staff.email }}"
+                          data-day-code="{{ sched.day_of_week }}"
+                          data-day-name="{{ sched.get_day_of_week_display }}"
+                          data-is-working="{{ sched.is_working|yesno:'true,false' }}"
+                          data-start-time="{{ sched.start_time|time:'H:i' }}"
+                          data-end-time="{{ sched.end_time|time:'H:i' }}"
+                          data-lunch-start="{{ sched.lunch_start|time:'H:i' }}"
+                          data-lunch-end="{{ sched.lunch_end|time:'H:i' }}"
+                          data-edit-url="{% url 'services:schedule_update' sched.pk %}">
+                    Edit
+                  </button>
+                  <a class="btn btn-sm btn-outline-danger" href="{% url 'services:schedule_delete' sched.pk %}">Delete</a>
+                {% else %}
+                  <span class="badge text-bg-light border text-muted">Active Shift</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6" class="text-center text-secondary py-4">
+                No staff shift schedules found in database.
+              </td>
+            </tr>
+          {% endfor %}
+          <tr id="tableEmptySearchRow" style="display: none;">
+            <td colspan="6" class="text-center text-secondary py-5">
+              <i class="bi bi-search text-muted fs-3 mb-2 d-block"></i>
+              <h6>No shift schedules match your search & filter criteria</h6>
+              <p class="small text-muted mb-0">Try clearing your filters or changing your search terms.</p>
             </td>
           </tr>
-        {% empty %}
-          <tr>
-            <td colspan="6" class="text-center text-secondary py-4">
-              No staff shift schedules found matching current filter criteria.
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
-{% include 'services/pagination.html' with page_obj=page_obj staff=staff_id day=day_param status=status_param %}
+<!-- =========================================================================
+     MODAL: QUICK EDIT SHIFT SCHEDULE (ZERO RELOAD MODAL EDITING)
+     ========================================================================= -->
+{% if user.is_owner %}
+<div class="modal fade" id="quickEditShiftModal" tabindex="-1" aria-labelledby="quickEditShiftModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+      <div class="modal-header border-bottom pb-3" style="background: #fafafa; border-radius: 16px 16px 0 0;">
+        <div>
+          <h5 class="modal-title fw-bold" id="quickEditShiftModalLabel">
+            <i class="bi bi-pencil-square me-2 text-brand"></i>Edit Shift Schedule
+          </h5>
+          <small class="text-muted" id="modalStaffSubtitle">Adjust staff hours or mark as weekly day off.</small>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
 
+      <form id="quickEditShiftForm" method="post" action="">
+        {% csrf_token %}
+        <input type="hidden" name="ajax" value="1">
+        <input type="hidden" name="staff" id="modalStaffId">
+        <input type="hidden" name="day_of_week" id="modalDayOfWeek">
+
+        <div class="modal-body p-4">
+          <!-- Duty Status Toggle Switch -->
+          <div class="p-3 rounded-3 mb-4 border d-flex align-items-center justify-content-between" style="background: #f8fafc;">
+            <div>
+              <strong class="d-block text-dark fs-6" id="modalStatusTitle">Duty Status</strong>
+              <small class="text-muted" id="modalStatusDesc">Toggle between active working shift or scheduled leave.</small>
+            </div>
+            <div class="form-check form-switch fs-4 mb-0">
+              <input class="form-check-input" type="checkbox" role="switch" id="modalIsWorkingSwitch" name="is_working" value="true" checked style="cursor: pointer;">
+            </div>
+          </div>
+
+          <!-- Working Hours Section (Visible when Working is checked) -->
+          <div id="modalWorkingFields">
+            <div class="row g-3 mb-3">
+              <div class="col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">
+                  <i class="bi bi-clock me-1 text-primary"></i>Shift Start Time
+                </label>
+                <input type="time" class="form-control" id="modalStartTime" name="start_time" value="09:00" required>
+              </div>
+              <div class="col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">
+                  <i class="bi bi-clock-history me-1 text-primary"></i>Shift End Time
+                </label>
+                <input type="time" class="form-control" id="modalEndTime" name="end_time" value="21:00" required>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">
+                  <i class="bi bi-cup-hot me-1 text-warning-emphasis"></i>Lunch Break Start
+                </label>
+                <input type="time" class="form-control" id="modalLunchStart" name="lunch_start" value="12:00">
+              </div>
+              <div class="col-6">
+                <label class="form-label small fw-bold text-secondary mb-1">
+                  <i class="bi bi-cup-hot-fill me-1 text-warning-emphasis"></i>Lunch Break End
+                </label>
+                <input type="time" class="form-control" id="modalLunchEnd" name="lunch_end" value="13:00">
+              </div>
+            </div>
+
+            <!-- Quick Presets -->
+            <div class="d-flex flex-wrap gap-2 pt-2 border-top">
+              <span class="small fw-bold text-muted me-1 align-self-center">Presets:</span>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyShiftPreset('09:00', '21:00', '12:00', '13:00')">
+                Standard (9am – 9pm)
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyShiftPreset('10:00', '19:00', '13:00', '14:00')">
+                Short (10am – 7pm)
+              </button>
+            </div>
+          </div>
+
+          <!-- Day Off Notice (Visible when Working is unchecked) -->
+          <div id="modalOffNotice" class="alert alert-danger border-danger-subtle d-flex align-items-center gap-3 mb-0" style="display: none;">
+            <i class="bi bi-moon-stars-fill fs-3 text-danger"></i>
+            <div>
+              <strong class="d-block text-danger">Scheduled as Day Off / Leave</strong>
+              <small class="text-danger-emphasis">Staff will not receive customer appointments or walk-in service assignments on this day.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer border-top bg-light p-3" style="border-radius: 0 0 16px 16px;">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" id="modalSaveBtn" class="btn btn-brand btn-sm px-3 fw-bold">
+            <i class="bi bi-check-lg me-1"></i>Save Shift Schedule
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endif %}
 
+<!-- Floating Toast Container for instant feedback -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
+  <div id="scheduleLiveToast" class="toast align-items-center text-white border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body d-flex align-items-center gap-2" id="scheduleLiveToastBody">
+        <i class="bi bi-check-circle-fill fs-5"></i>
+        <span id="scheduleLiveToastText">Schedule updated.</span>
+      </div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================================
+     JAVASCRIPT: ZERO-RELOAD TABS, LIVE SEARCH & REAL-TIME FILTERING
+     ========================================================================= -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // -------------------------------------------------------------------------
+  // State Variables
+  // -------------------------------------------------------------------------
+  let currentView = "{{ view_mode|default:'roster' }}";
+  let currentSpec = "{{ spec_filter|default:'' }}";
+  let currentStaffId = "{{ staff_id|default:'' }}";
+  let currentDay = "{{ selected_day_code|default:today_code|default:'0' }}";
+  let searchQuery = "{{ search_param|default:'' }}".trim().toLowerCase();
+
+  // Elements
+  const searchInput = document.getElementById('scheduleSearchInput');
+  const searchClearBtn = document.getElementById('scheduleSearchClear');
+  const staffQuickFilter = document.getElementById('staffQuickFilter');
+  const clearAllFiltersBtn = document.getElementById('clearAllFiltersBtn');
+  const filterStatusContainer = document.getElementById('filterStatusContainer');
+  const searchBadge = document.getElementById('searchBadge');
+  const staffBadge = document.getElementById('staffBadge');
+  const specBadge = document.getElementById('specBadge');
+  const resultsCountBadge = document.getElementById('resultsCountBadge');
+
+  // View sections
+  const viewSections = {
+    roster: document.getElementById('viewModeRoster'),
+    daily: document.getElementById('viewModeDaily'),
+    table: document.getElementById('viewModeTable')
+  };
+
+  // View switcher buttons
+  const viewButtons = {
+    roster: document.getElementById('btnViewRoster'),
+    daily: document.getElementById('btnViewDaily'),
+    table: document.getElementById('btnViewTable')
+  };
+
+  // Category pills
+  const catPills = document.querySelectorAll('.schedule-cat-pill');
+
+  // Day pills
+  const dayPills = document.querySelectorAll('.duty-day-pill');
+
+  // Table filters
+  const tableStaffFilter = document.getElementById('tableStaffFilter');
+  const tableDayFilter = document.getElementById('tableDayFilter');
+  const tableStatusFilter = document.getElementById('tableStatusFilter');
+  const tableResetBtn = document.getElementById('tableResetFiltersBtn');
+
+  // Modal elements
+  const editModalEl = document.getElementById('quickEditShiftModal');
+  const editModal = editModalEl ? new bootstrap.Modal(editModalEl) : null;
+  const editForm = document.getElementById('quickEditShiftForm');
+  const isWorkingSwitch = document.getElementById('modalIsWorkingSwitch');
+  const workingFields = document.getElementById('modalWorkingFields');
+  const offNotice = document.getElementById('modalOffNotice');
+  const modalStatusTitle = document.getElementById('modalStatusTitle');
+
+  // Toast
+  const toastEl = document.getElementById('scheduleLiveToast');
+  const toastBody = document.getElementById('scheduleLiveToastBody');
+  const toastText = document.getElementById('scheduleLiveToastText');
+  const liveToast = toastEl ? new bootstrap.Toast(toastEl, { delay: 3500 }) : null;
+
+  function showToast(message, type = 'success') {
+    if (!toastEl) return;
+    toastEl.className = 'toast align-items-center text-white border-0 shadow-lg bg-' + (type === 'error' ? 'danger' : type);
+    toastText.textContent = message;
+    if (liveToast) liveToast.show();
+  }
+
+  // -------------------------------------------------------------------------
+  // URL Synchronization (Zero Reload)
+  // -------------------------------------------------------------------------
+  function syncUrl() {
+    if (!window.history || !window.history.replaceState) return;
+    const params = new URLSearchParams();
+    if (currentView && currentView !== 'roster') params.set('view', currentView);
+    if (searchQuery) params.set('q', searchQuery);
+    if (currentStaffId) params.set('staff', currentStaffId);
+    if (currentSpec && currentView === 'roster') params.set('spec', currentSpec);
+    if (currentView === 'daily') params.set('day', currentDay);
+    const qs = params.toString();
+    const newUrl = window.location.pathname + (qs ? '?' + qs : '');
+    window.history.replaceState(null, '', newUrl);
+  }
+
+  // -------------------------------------------------------------------------
+  // View Switcher (Zero Reload Tabs)
+  // -------------------------------------------------------------------------
+  function switchView(viewName) {
+    currentView = viewName;
+
+    // Toggle switcher buttons
+    Object.keys(viewButtons).forEach(key => {
+      if (viewButtons[key]) {
+        viewButtons[key].classList.toggle('active', key === viewName);
+      }
+    });
+
+    // Toggle view sections
+    Object.keys(viewSections).forEach(key => {
+      if (viewSections[key]) {
+        viewSections[key].classList.toggle('d-none', key !== viewName);
+      }
+    });
+
+    // If switching to table, synchronize table dropdowns
+    if (viewName === 'table') {
+      if (tableStaffFilter) tableStaffFilter.value = currentStaffId;
+      applyTableFilters();
+    } else if (viewName === 'daily') {
+      applyDailyFilters();
+    } else {
+      applyRosterFilters();
+    }
+
+    updateFilterBadges();
+    syncUrl();
+  }
+
+  Object.keys(viewButtons).forEach(key => {
+    if (viewButtons[key]) {
+      viewButtons[key].addEventListener('click', function (e) {
+        e.preventDefault();
+        switchView(key);
+      });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Category Pills Filter (Roster View: Zero Reload)
+  // -------------------------------------------------------------------------
+  catPills.forEach(pill => {
+    pill.addEventListener('click', function (e) {
+      e.preventDefault();
+      catPills.forEach(p => p.classList.remove('active'));
+      this.classList.add('active');
+      currentSpec = this.dataset.spec || '';
+      applyRosterFilters();
+      updateFilterBadges();
+      syncUrl();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Day Selector Pills (Daily View: Zero Reload)
+  // -------------------------------------------------------------------------
+  dayPills.forEach(pill => {
+    pill.addEventListener('click', function (e) {
+      e.preventDefault();
+      dayPills.forEach(p => p.classList.remove('active'));
+      this.classList.add('active');
+      currentDay = String(this.dataset.dayCode);
+
+      // Show matching daily panel, hide others
+      document.querySelectorAll('.daily-day-panel').forEach(panel => {
+        panel.classList.toggle('d-none', panel.dataset.dayCode !== currentDay);
+      });
+
+      applyDailyFilters();
+      syncUrl();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Quick Staff Filter (Global: Zero Reload)
+  // -------------------------------------------------------------------------
+  if (staffQuickFilter) {
+    staffQuickFilter.addEventListener('change', function () {
+      currentStaffId = this.value;
+      if (tableStaffFilter) tableStaffFilter.value = currentStaffId;
+      applyAllFilters();
+      syncUrl();
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Search Bar Functionality (Live Typing, Debounce, Zero Reload)
+  // -------------------------------------------------------------------------
+  if (searchInput) {
+    searchInput.addEventListener('input', function () {
+      searchQuery = this.value.trim().toLowerCase();
+      if (searchClearBtn) {
+        searchClearBtn.style.display = searchQuery ? 'inline-block' : 'none';
+      }
+      applyAllFilters();
+      syncUrl();
+    });
+
+    searchInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        this.value = '';
+        searchQuery = '';
+        if (searchClearBtn) searchClearBtn.style.display = 'none';
+        applyAllFilters();
+        syncUrl();
+      } else if (e.key === 'Enter') {
+        e.preventDefault(); // Prevent full page reload!
+      }
+    });
+  }
+
+  if (searchClearBtn) {
+    searchClearBtn.addEventListener('click', function () {
+      if (searchInput) searchInput.value = '';
+      searchQuery = '';
+      this.style.display = 'none';
+      applyAllFilters();
+      syncUrl();
+      if (searchInput) searchInput.focus();
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Table View Filter Dropdowns (Instant Client-side: Zero Reload)
+  // -------------------------------------------------------------------------
+  function applyTableFilters() {
+    const staffVal = tableStaffFilter ? tableStaffFilter.value : currentStaffId;
+    const dayVal = tableDayFilter ? tableDayFilter.value : '';
+    const statusVal = tableStatusFilter ? tableStatusFilter.value : '';
+    const q = searchQuery;
+
+    const rows = document.querySelectorAll('.table-sched-row');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+      const rowStaff = row.dataset.staffId || '';
+      const rowDay = row.dataset.day || '';
+      const rowStatus = row.dataset.status || '';
+      const rowText = (row.dataset.searchText || '').toLowerCase();
+
+      const matchStaff = !staffVal || rowStaff === staffVal;
+      const matchDay = !dayVal || rowDay === dayVal;
+      const matchStatus = !statusVal || rowStatus === statusVal;
+      const matchSearch = !q || rowText.includes(q);
+
+      if (matchStaff && matchDay && matchStatus && matchSearch) {
+        row.style.display = '';
+        visibleCount++;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    const emptyRow = document.getElementById('tableEmptySearchRow');
+    if (emptyRow) {
+      emptyRow.style.display = (visibleCount === 0) ? '' : 'none';
+    }
+
+    if (resultsCountBadge && currentView === 'table') {
+      resultsCountBadge.textContent = `${visibleCount} of ${rows.length} shifts displayed`;
+    }
+  }
+
+  if (tableStaffFilter) {
+    tableStaffFilter.addEventListener('change', function () {
+      currentStaffId = this.value;
+      if (staffQuickFilter) staffQuickFilter.value = currentStaffId;
+      applyAllFilters();
+      syncUrl();
+    });
+  }
+
+  if (tableDayFilter) tableDayFilter.addEventListener('change', applyTableFilters);
+  if (tableStatusFilter) tableStatusFilter.addEventListener('change', applyTableFilters);
+
+  if (tableResetBtn) {
+    tableResetBtn.addEventListener('click', function () {
+      if (tableStaffFilter) tableStaffFilter.value = '';
+      if (tableDayFilter) tableDayFilter.value = '';
+      if (tableStatusFilter) tableStatusFilter.value = '';
+      currentStaffId = '';
+      if (staffQuickFilter) staffQuickFilter.value = '';
+      applyAllFilters();
+      syncUrl();
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Filtering Logic for View 1: Roster
+  // -------------------------------------------------------------------------
+  function applyRosterFilters() {
+    const cards = document.querySelectorAll('.staff-roster-card');
+    const q = searchQuery;
+    const spec = currentSpec;
+    const staffId = currentStaffId;
+
+    let visibleCards = 0;
+
+    cards.forEach(card => {
+      const cardStaffId = card.dataset.staffId || '';
+      const cardCat = card.dataset.category || '';
+      const cardText = (card.dataset.searchText || '').toLowerCase();
+
+      const matchStaff = !staffId || cardStaffId === staffId;
+      const matchCat = !spec || cardCat === spec;
+      const matchSearch = !q || cardText.includes(q);
+
+      if (matchStaff && matchCat && matchSearch) {
+        card.style.display = '';
+        visibleCards++;
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    const emptyMsg = document.getElementById('rosterEmptySearch');
+    if (emptyMsg) {
+      emptyMsg.style.display = (visibleCards === 0 && cards.length > 0) ? 'block' : 'none';
+    }
+
+    if (resultsCountBadge && currentView === 'roster') {
+      resultsCountBadge.textContent = `${visibleCards} of ${cards.length} technicians displayed`;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Filtering Logic for View 2: Daily Roster
+  // -------------------------------------------------------------------------
+  function applyDailyFilters() {
+    const activePanel = document.querySelector(`.daily-day-panel[data-day-code="${currentDay}"]`);
+    if (!activePanel) return;
+
+    const q = searchQuery;
+    const staffId = currentStaffId;
+
+    const dutyCards = activePanel.querySelectorAll('.daily-duty-card-wrapper');
+    let visibleDuty = 0;
+    dutyCards.forEach(card => {
+      const cardStaff = card.dataset.staffId || '';
+      const cardText = (card.dataset.searchText || '').toLowerCase();
+      const matchStaff = !staffId || cardStaff === staffId;
+      const matchSearch = !q || cardText.includes(q);
+
+      if (matchStaff && matchSearch) {
+        card.style.display = '';
+        visibleDuty++;
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    const offCards = activePanel.querySelectorAll('.daily-off-card-wrapper');
+    let visibleOff = 0;
+    offCards.forEach(card => {
+      const cardStaff = card.dataset.staffId || '';
+      const cardText = (card.dataset.searchText || '').toLowerCase();
+      const matchStaff = !staffId || cardStaff === staffId;
+      const matchSearch = !q || cardText.includes(q);
+
+      if (matchStaff && matchSearch) {
+        card.style.display = '';
+        visibleOff++;
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    // Update counts in badges of active panel
+    const dutyCountEl = activePanel.querySelector('.panel-duty-count');
+    if (dutyCountEl) dutyCountEl.textContent = visibleDuty;
+    const offCountEl = activePanel.querySelector('.panel-off-count');
+    if (offCountEl) offCountEl.textContent = visibleOff;
+
+    const emptyPanelMsg = activePanel.querySelector('.daily-empty-search');
+    if (emptyPanelMsg) {
+      const totalAvailable = dutyCards.length + offCards.length;
+      emptyPanelMsg.style.display = (visibleDuty + visibleOff === 0 && totalAvailable > 0) ? 'block' : 'none';
+    }
+
+    if (resultsCountBadge && currentView === 'daily') {
+      resultsCountBadge.textContent = `${visibleDuty} on duty &bull; ${visibleOff} on leave`;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Update Filter Badges Bar
+  // -------------------------------------------------------------------------
+  function updateFilterBadges() {
+    const hasSearch = Boolean(searchQuery);
+    const hasStaff = Boolean(currentStaffId);
+    const hasSpec = Boolean(currentSpec) && currentView === 'roster';
+
+    const hasAnyFilter = hasSearch || hasStaff || hasSpec;
+
+    if (filterStatusContainer) {
+      filterStatusContainer.style.display = hasAnyFilter ? 'flex' : 'none';
+    }
+    if (clearAllFiltersBtn) {
+      clearAllFiltersBtn.style.display = hasAnyFilter ? 'inline-block' : 'none';
+    }
+
+    if (searchBadge) {
+      if (hasSearch) {
+        searchBadge.innerHTML = `<i class="bi bi-search me-1"></i>"${searchQuery}" <i class="bi bi-x ms-1" style="cursor:pointer;" onclick="clearSearchFilter()"></i>`;
+        searchBadge.style.display = 'inline-flex';
+      } else {
+        searchBadge.style.display = 'none';
+      }
+    }
+
+    if (staffBadge) {
+      if (hasStaff && staffQuickFilter) {
+        const selectedOpt = staffQuickFilter.options[staffQuickFilter.selectedIndex];
+        const staffName = selectedOpt ? selectedOpt.text : 'Staff';
+        staffBadge.innerHTML = `<i class="bi bi-person me-1"></i>${staffName} <i class="bi bi-x ms-1" style="cursor:pointer;" onclick="clearStaffFilter()"></i>`;
+        staffBadge.style.display = 'inline-flex';
+      } else {
+        staffBadge.style.display = 'none';
+      }
+    }
+
+    if (specBadge) {
+      if (hasSpec) {
+        const catMap = {
+          nail_art: 'Nail Art & Extensions',
+          spa_lashes: 'Lashes & Spa',
+          classic_care: 'Classic Nail Care'
+        };
+        specBadge.innerHTML = `<i class="bi bi-tag me-1"></i>${catMap[currentSpec] || currentSpec} <i class="bi bi-x ms-1" style="cursor:pointer;" onclick="clearSpecFilter()"></i>`;
+        specBadge.style.display = 'inline-flex';
+      } else {
+        specBadge.style.display = 'none';
+      }
+    }
+  }
+
+  function applyAllFilters() {
+    applyRosterFilters();
+    applyDailyFilters();
+    applyTableFilters();
+    updateFilterBadges();
+  }
+
+  // -------------------------------------------------------------------------
+  // Global Filter Reset Function
+  // -------------------------------------------------------------------------
+  window.resetAllScheduleFilters = function () {
+    searchQuery = '';
+    currentStaffId = '';
+    currentSpec = '';
+
+    if (searchInput) searchInput.value = '';
+    if (searchClearBtn) searchClearBtn.style.display = 'none';
+    if (staffQuickFilter) staffQuickFilter.value = '';
+    if (tableStaffFilter) tableStaffFilter.value = '';
+    if (tableDayFilter) tableDayFilter.value = '';
+    if (tableStatusFilter) tableStatusFilter.value = '';
+
+    catPills.forEach(p => p.classList.toggle('active', !p.dataset.spec));
+
+    applyAllFilters();
+    syncUrl();
+  };
+
+  if (clearAllFiltersBtn) {
+    clearAllFiltersBtn.addEventListener('click', window.resetAllScheduleFilters);
+  }
+
+  window.clearSearchFilter = function () {
+    searchQuery = '';
+    if (searchInput) searchInput.value = '';
+    if (searchClearBtn) searchClearBtn.style.display = 'none';
+    applyAllFilters();
+    syncUrl();
+  };
+
+  window.clearStaffFilter = function () {
+    currentStaffId = '';
+    if (staffQuickFilter) staffQuickFilter.value = '';
+    if (tableStaffFilter) tableStaffFilter.value = '';
+    applyAllFilters();
+    syncUrl();
+  };
+
+  window.clearSpecFilter = function () {
+    currentSpec = '';
+    catPills.forEach(p => p.classList.toggle('active', !p.dataset.spec));
+    applyAllFilters();
+    syncUrl();
+  };
+
+  // -------------------------------------------------------------------------
+  // Quick Edit Shift Modal (Zero Reload Form Submit & DOM Update)
+  // -------------------------------------------------------------------------
+  function openQuickEditModal(data) {
+    if (!editModal || !editForm) return;
+
+    editForm.action = data.editUrl || `/services/schedules/${data.schedId}/edit/`;
+    document.getElementById('modalStaffId').value = data.staffId || '';
+    document.getElementById('modalDayOfWeek').value = data.dayCode || '';
+
+    const subtitle = document.getElementById('modalStaffSubtitle');
+    if (subtitle) {
+      subtitle.textContent = `${data.staffName} &bull; ${data.dayName} Shift`;
+    }
+
+    const isWorking = data.isWorking === 'true' || data.isWorking === true;
+    if (isWorkingSwitch) {
+      isWorkingSwitch.checked = isWorking;
+      toggleModalWorkingState(isWorking);
+    }
+
+    const startTimeEl = document.getElementById('modalStartTime');
+    if (startTimeEl) startTimeEl.value = data.startTime || '09:00';
+    const endTimeEl = document.getElementById('modalEndTime');
+    if (endTimeEl) endTimeEl.value = data.endTime || '21:00';
+    const lunchStartEl = document.getElementById('modalLunchStart');
+    if (lunchStartEl) lunchStartEl.value = data.lunchStart || '12:00';
+    const lunchEndEl = document.getElementById('modalLunchEnd');
+    if (lunchEndEl) lunchEndEl.value = data.lunchEnd || '13:00';
+
+    editModal.show();
+  }
+
+  function toggleModalWorkingState(isWorking) {
+    if (workingFields) workingFields.style.display = isWorking ? 'block' : 'none';
+    if (offNotice) offNotice.style.display = isWorking ? 'none' : 'flex';
+    if (modalStatusTitle) {
+      modalStatusTitle.textContent = isWorking ? 'On Duty (Working Shift)' : 'Day Off (Leave)';
+    }
+  }
+
+  if (isWorkingSwitch) {
+    isWorkingSwitch.addEventListener('change', function () {
+      toggleModalWorkingState(this.checked);
+    });
+  }
+
+  window.applyShiftPreset = function (start, end, lunchS, lunchE) {
+    const s = document.getElementById('modalStartTime');
+    const e = document.getElementById('modalEndTime');
+    const ls = document.getElementById('modalLunchStart');
+    const le = document.getElementById('modalLunchEnd');
+    if (s) s.value = start;
+    if (e) e.value = end;
+    if (ls) ls.value = lunchS;
+    if (le) le.value = lunchE;
+  };
+
+  // Delegate click for matrix day cells and edit buttons
+  document.addEventListener('click', function (e) {
+    // Check if clicked cell in roster matrix
+    const cell = e.target.closest('.staff-day-cell');
+    if (cell && cell.dataset.schedId && !e.target.closest('a')) {
+      e.preventDefault();
+      openQuickEditModal(cell.dataset);
+      return;
+    }
+
+    // Check if clicked quick edit button
+    const btn = e.target.closest('.btn-quick-edit');
+    if (btn && btn.dataset.schedId) {
+      e.preventDefault();
+      openQuickEditModal(btn.dataset);
+    }
+  });
+
+  // Modal Save via AJAX (Zero Reload!)
+  if (editForm) {
+    editForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const saveBtn = document.getElementById('modalSaveBtn');
+      const originalHtml = saveBtn ? saveBtn.innerHTML : '';
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving…';
+      }
+
+      try {
+        const formData = new FormData(editForm);
+        // If unchecked, explicitly provide is_working=false
+        if (!isWorkingSwitch.checked) {
+          formData.delete('is_working');
+        }
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const response = await fetch(editForm.action, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': csrfToken
+          },
+          body: new URLSearchParams(formData)
+        });
+
+        const data = await response.json();
+        if (response.ok && data.status === 'ok') {
+          showToast(data.message || 'Shift schedule updated successfully.', 'success');
+          updateDomWithNewSchedule(data.schedule);
+          if (editModal) editModal.hide();
+        } else {
+          showToast(data.message || 'Failed to update schedule. Please check inputs.', 'danger');
+        }
+      } catch (err) {
+        showToast('Error saving shift schedule. Please try again.', 'danger');
+      } finally {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = originalHtml;
+        }
+      }
+    });
+  }
+
+  // Update DOM elements matching the edited schedule without reloading
+  function updateDomWithNewSchedule(sched) {
+    if (!sched || !sched.id) return;
+    const schedId = String(sched.id);
+
+    // 1. Update Roster Cell
+    const cell = document.querySelector(`.staff-day-cell[data-sched-id="${schedId}"]`);
+    if (cell) {
+      cell.dataset.isWorking = sched.is_working ? 'true' : 'false';
+      cell.dataset.startTime = sched.start_time;
+      cell.dataset.endTime = sched.end_time;
+      cell.dataset.lunchStart = sched.lunch_start;
+      cell.dataset.lunchEnd = sched.lunch_end;
+
+      cell.classList.toggle('is-working', sched.is_working);
+      cell.classList.toggle('is-off', !sched.is_working);
+
+      const hoursEl = cell.querySelector('.staff-day-hours');
+      if (hoursEl) {
+        if (sched.is_working) {
+          hoursEl.textContent = `${sched.start_time_fmt} - ${sched.end_time_fmt}`;
+          hoursEl.classList.remove('text-danger');
+        } else {
+          hoursEl.textContent = 'Off Duty';
+          hoursEl.classList.add('text-danger');
+        }
+      }
+
+      const lunchEl = cell.querySelector('.staff-day-lunch');
+      if (lunchEl) {
+        lunchEl.style.display = sched.is_working ? '' : 'none';
+        const lunchText = lunchEl.querySelector('.lunch-text');
+        if (lunchText) lunchText.textContent = `${sched.lunch_start_fmt}-${sched.lunch_end_fmt}`;
+      }
+
+      const offSub = cell.querySelector('.staff-day-off-sub');
+      if (offSub) offSub.style.display = sched.is_working ? 'none' : '';
+
+      const badge = cell.querySelector('.staff-day-badge');
+      if (badge) {
+        badge.className = `badge ${sched.is_working ? 'bg-success' : 'bg-danger'} text-white staff-day-badge`;
+        badge.innerHTML = sched.is_working ? '<i class="bi bi-check-circle me-1"></i>Duty' : '<i class="bi bi-moon-stars me-1"></i>Day Off (Leave)';
+      }
+    }
+
+    // 2. Update Table Row
+    const row = document.querySelector(`.table-sched-row[data-sched-id="${schedId}"]`);
+    if (row) {
+      row.dataset.status = sched.is_working ? 'working' : 'leave';
+      row.classList.toggle('table-light', !sched.is_working);
+
+      const hoursCell = row.querySelector('.row-hours-cell');
+      if (hoursCell) {
+        hoursCell.innerHTML = sched.is_working
+          ? `<span class="badge text-bg-light border"><i class="bi bi-clock me-1 text-muted"></i> ${sched.start_time_fmt} - ${sched.end_time_fmt}</span>`
+          : '<span class="text-secondary small fst-italic">Off Duty</span>';
+      }
+
+      const lunchCell = row.querySelector('.row-lunch-cell');
+      if (lunchCell) {
+        lunchCell.innerHTML = sched.is_working
+          ? `<span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle"><i class="bi bi-cup-hot me-1"></i> ${sched.lunch_start_fmt} - ${sched.lunch_end_fmt}</span>`
+          : '<span class="text-muted small">&mdash;</span>';
+      }
+
+      const statusCell = row.querySelector('.row-status-cell');
+      if (statusCell) {
+        statusCell.innerHTML = sched.is_working
+          ? '<span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i> Working</span>'
+          : '<span class="badge text-bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-moon-stars me-1"></i> Day Off (Leave)</span>';
+      }
+
+      const editBtn = row.querySelector('.btn-quick-edit');
+      if (editBtn) {
+        editBtn.dataset.isWorking = sched.is_working ? 'true' : 'false';
+        editBtn.dataset.startTime = sched.start_time;
+        editBtn.dataset.endTime = sched.end_time;
+        editBtn.dataset.lunchStart = sched.lunch_start;
+        editBtn.dataset.lunchEnd = sched.lunch_end;
+      }
+    }
+
+    // Re-apply filters to sync counts and visibility
+    applyAllFilters();
+  }
+
+  // -------------------------------------------------------------------------
+  // Sync Shifts to Calendar (Zero Reload AJAX POST)
+  // -------------------------------------------------------------------------
+  const syncForm = document.getElementById('syncShiftsForm');
+  if (syncForm) {
+    syncForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const btn = document.getElementById('syncShiftsBtn');
+      const originalHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Syncing…';
+      }
+
+      try {
+        const csrfToken = syncForm.querySelector('[name=csrfmiddlewaretoken]').value;
+        const response = await fetch(syncForm.action, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': csrfToken
+          },
+          body: new URLSearchParams(new FormData(syncForm))
+        });
+
+        const data = await response.json();
+        if (response.ok && data.status === 'ok') {
+          showToast(data.message || 'Successfully synchronized calendar time blocks.', 'success');
+        } else {
+          showToast(data.message || 'Failed to sync calendar blocks.', 'danger');
+        }
+      } catch (err) {
+        showToast('Error syncing time blocks. Please try again.', 'danger');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
+      }
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Initial View & Filter Setup
+  // -------------------------------------------------------------------------
+  if (searchClearBtn && searchQuery) {
+    searchClearBtn.style.display = 'inline-block';
+  }
+
+  switchView(currentView);
+  applyAllFilters();
+});
+</script>
 {% endblock %}

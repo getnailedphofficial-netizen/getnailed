@@ -1,6 +1,7 @@
 from django import forms
 from django.forms import BaseFormSet, formset_factory
 from django.db.models import Q
+from django.utils import timezone
 from itertools import groupby
 
 from apps.accounts.models import User
@@ -135,6 +136,7 @@ class CheckoutForm(forms.Form):
             .distinct()
             .order_by("last_name", "first_name")
         )
+        today_date = timezone.localdate()
         self.fields["appointment"].queryset = (
             Appointment.objects.exclude(
                 status__in=(
@@ -144,7 +146,10 @@ class CheckoutForm(forms.Form):
                     Appointment.Status.EXPIRED,
                 )
             )
-            .filter(sale__isnull=True)
+            .filter(
+                Q(sale__isnull=True)
+                | Q(status=Appointment.Status.ONGOING, appointment_date=today_date)
+            )
             .select_related("customer")
             .order_by("appointment_date", "start_time")
         )
@@ -153,13 +158,18 @@ class CheckoutForm(forms.Form):
         )
         if not self.is_bound and not self.initial.get("walk_in_referral_number"):
             import secrets
-            from django.utils import timezone
             self.fields["walk_in_referral_number"].initial = (
                 f"WLK-{timezone.localdate():%Y%m%d}-{secrets.randbelow(9000) + 1000}"
             )
 
     def clean(self):
         cleaned_data = super().clean()
+        mode = self.data.get("pos_customer_mode", "")
+        if mode == "walkin" and not self.data.get("appointment"):
+            cleaned_data["appointment"] = None
+        elif (mode == "booked" or self.data.get("appointment")) and cleaned_data.get("appointment"):
+            cleaned_data["walk_in_referral_number"] = ""
+
         dtype = cleaned_data.get("discount_type")
         id_num = cleaned_data.get("discount_id_number", "").strip()
         vcode = cleaned_data.get("voucher_code", "").strip()
