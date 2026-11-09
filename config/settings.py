@@ -28,7 +28,7 @@ ALLOWED_HOSTS = [
     for host in os.getenv('DJANGO_ALLOWED_HOSTS', '').split(',')
     if host.strip()
 ]
-for default_host in ['127.0.0.1', 'localhost', 'getnailed.vercel.app']:
+for default_host in ['127.0.0.1', 'localhost', 'getnailed.vercel.app', 'getnailed-woad.vercel.app']:
     if default_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(default_host)
 
@@ -37,7 +37,7 @@ CSRF_TRUSTED_ORIGINS = [
     for origin in os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
     if origin.strip()
 ]
-for default_origin in ['https://getnailed.vercel.app', 'https://*.vercel.app']:
+for default_origin in ['https://getnailed.vercel.app', 'https://getnailed-woad.vercel.app', 'https://*.vercel.app']:
     if default_origin not in CSRF_TRUSTED_ORIGINS:
         CSRF_TRUSTED_ORIGINS.append(default_origin)
 
