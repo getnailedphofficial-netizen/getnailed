@@ -3,7 +3,7 @@
 
 {% block title %}Sign-in Failed - {{ brand_name }}{% endblock %}
 
-{% block content %}
+{% block public_content %}
 <div class="min-h-[70vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full bg-white dark:bg-stone-900 shadow-xl rounded-2xl p-8 border border-stone-200 dark:border-stone-800 text-center">
         <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-rose-100 dark:bg-rose-900/30 mb-6">
@@ -19,7 +19,7 @@
         <p class="text-stone-600 dark:text-stone-400 mb-6">
             We were unable to complete sign in with your Google account.
             {% if auth_error.exception %}
-                <span class="block mt-2 text-xs font-mono text-stone-500 bg-stone-100 dark:bg-stone-800 p-2 rounded break-all">
+                <span class="block mt-2 text-xs font-mono text-rose-600 bg-rose-50 dark:bg-stone-800 p-2 rounded break-all">
                     {{ auth_error.exception }}
                 </span>
             {% endif %}
