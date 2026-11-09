@@ -32,6 +32,14 @@ for default_host in ['127.0.0.1', 'localhost', 'getnailed.vercel.app']:
     if default_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(default_host)
 
+vercel_url = os.getenv('VERCEL_URL')
+if vercel_url:
+    if vercel_url not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(vercel_url)
+    origin = f'https://{vercel_url}'
+    if origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
+
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
@@ -161,9 +169,9 @@ CACHE_BACKEND = os.getenv(
     'django.core.cache.backends.locmem.LocMemCache',
 )
 CACHE_LOCATION = os.getenv('DJANGO_CACHE_LOCATION', 'get-nailed-development')
-if IS_PRODUCTION and CACHE_BACKEND != 'django.core.cache.backends.redis.RedisCache':
+if IS_PRODUCTION and not IS_VERCEL and CACHE_BACKEND != 'django.core.cache.backends.redis.RedisCache':
     raise ImproperlyConfigured('Production requires the shared Redis cache backend.')
-if IS_PRODUCTION:
+if IS_PRODUCTION and (not IS_VERCEL or CACHE_BACKEND == 'django.core.cache.backends.redis.RedisCache'):
     cache_url = urlparse(CACHE_LOCATION)
     if cache_url.scheme not in {'redis', 'rediss'} or not cache_url.hostname:
         raise ImproperlyConfigured(
@@ -205,7 +213,10 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = Path(os.getenv('DJANGO_MEDIA_ROOT', BASE_DIR / 'media')).resolve()
 
 if IS_PRODUCTION and not os.getenv('DJANGO_MEDIA_ROOT'):
-    raise ImproperlyConfigured('Production requires an explicit DJANGO_MEDIA_ROOT.')
+    if IS_VERCEL:
+        MEDIA_ROOT = Path('/tmp/media').resolve()
+    else:
+        raise ImproperlyConfigured('Production requires an explicit DJANGO_MEDIA_ROOT.')
 for static_location in [STATIC_ROOT, *STATICFILES_DIRS]:
     static_location = Path(static_location).resolve()
     if (
