@@ -288,6 +288,7 @@ ACCOUNT_LOGOUT_ON_GET = False
 ACCOUNT_RATE_LIMITS = {'login_failed': None}
 
 # Google Social Account Authentication
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
 SOCIALACCOUNT_ADAPTER = 'apps.accounts.adapters.CustomSocialAccountAdapter'
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
