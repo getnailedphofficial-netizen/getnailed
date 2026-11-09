@@ -25,6 +25,8 @@ class AccountAdapter(DefaultAccountAdapter):
     }
 
     def is_open_for_signup(self, request):
+        if hasattr(request, "session") and "socialaccount_sociallogin" in request.session:
+            return True
         return False
 
     def send_notification_mail(self, template_prefix, user, context=None, email=None):
@@ -89,6 +91,31 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
     def is_open_for_signup(self, request, sociallogin):
         return True
 
+    def is_auto_signup_allowed(self, request, sociallogin):
+        return True
+
+    def pre_social_login(self, request, sociallogin):
+        # If social account is already connected to an existing user, proceed normally
+        if sociallogin.is_existing:
+            return
+
+        # Attempt to link by verified email to existing local account
+        email = None
+        for email_addr in sociallogin.email_addresses:
+            if getattr(email_addr, "verified", False) or email_addr.email:
+                email = email_addr.email
+                break
+        if not email and getattr(sociallogin, "user", None) and sociallogin.user.email:
+            email = sociallogin.user.email
+
+        if email:
+            from apps.accounts.models import User
+            try:
+                existing_user = User.objects.get(email__iexact=email.strip())
+                sociallogin.connect(request, existing_user)
+            except User.DoesNotExist:
+                pass
+
     def populate_user(self, request, sociallogin, data):
         user = super().populate_user(request, sociallogin, data)
         if not getattr(user, "role", None):
@@ -96,6 +123,19 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         user.is_active = True
         user.email_verified_at = timezone.now()
         return user
+
+    def on_authentication_error(
+        self,
+        request,
+        provider,
+        error=None,
+        exception=None,
+        extra_context=None,
+    ):
+        print(f"[OAUTH ERROR] Provider: {provider}, Error: {error}, Exception: {repr(exception)}, Context: {extra_context}")
+        return super().on_authentication_error(
+            request, provider, error=error, exception=exception, extra_context=extra_context
+        )
 
     def save_user(self, request, sociallogin, form=None):
         user = super().save_user(request, sociallogin, form=form)

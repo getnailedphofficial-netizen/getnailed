@@ -100,6 +100,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'apps.core.middleware.CanonicalDomainMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'apps.audittrail.request_middleware.RequestIDMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -239,6 +240,7 @@ AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesStandaloneBackend',
     'apps.accounts.backends.EligibleUserBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 LOGIN_URL = 'accounts:login'
 LOGIN_REDIRECT_URL = 'core:dashboard_router'
@@ -259,10 +261,10 @@ STAFF_INACTIVITY_TIMEOUT = int(os.getenv('STAFF_INACTIVITY_TIMEOUT_MINUTES', '60
 BRAND_NAME = 'Get Nailed Nail Bar and Spa'
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 if not PUBLIC_BASE_URL:
-    if vercel_url:
+    if IS_VERCEL or IS_PRODUCTION:
+        PUBLIC_BASE_URL = 'https://getnailed-woad.vercel.app'
+    elif vercel_url:
         PUBLIC_BASE_URL = f'https://{vercel_url}'
-    elif IS_VERCEL or IS_PRODUCTION:
-        PUBLIC_BASE_URL = 'https://getnailed.vercel.app'
 
 if not DEBUG and not PUBLIC_BASE_URL:
     raise ImproperlyConfigured('PUBLIC_BASE_URL must be configured outside development.')
