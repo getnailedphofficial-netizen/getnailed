@@ -415,4 +415,8 @@ SECURE_HSTS_PRELOAD = ENABLE_HSTS
 
 # Additional recommended security headers
 SECURE_BROWSER_XSS_FILTER = True
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if os.getenv('USE_PROXY', 'False').lower() == 'true' else None
+SECURE_PROXY_SSL_HEADER = (
+    ('HTTP_X_FORWARDED_PROTO', 'https')
+    if (IS_VERCEL or os.getenv('USE_PROXY', 'False').lower() == 'true')
+    else None
+)
