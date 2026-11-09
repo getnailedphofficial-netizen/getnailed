@@ -32,14 +32,6 @@ for default_host in ['127.0.0.1', 'localhost', 'getnailed.vercel.app']:
     if default_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(default_host)
 
-vercel_url = os.getenv('VERCEL_URL')
-if vercel_url:
-    if vercel_url not in ALLOWED_HOSTS:
-        ALLOWED_HOSTS.append(vercel_url)
-    origin = f'https://{vercel_url}'
-    if origin not in CSRF_TRUSTED_ORIGINS:
-        CSRF_TRUSTED_ORIGINS.append(origin)
-
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
@@ -48,6 +40,14 @@ CSRF_TRUSTED_ORIGINS = [
 for default_origin in ['https://getnailed.vercel.app', 'https://*.vercel.app']:
     if default_origin not in CSRF_TRUSTED_ORIGINS:
         CSRF_TRUSTED_ORIGINS.append(default_origin)
+
+vercel_url = os.getenv('VERCEL_URL')
+if vercel_url:
+    if vercel_url not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(vercel_url)
+    origin = f'https://{vercel_url}'
+    if origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
 
 if IS_PRODUCTION and DEBUG:
     raise ImproperlyConfigured('DJANGO_DEBUG must be False in production.')
