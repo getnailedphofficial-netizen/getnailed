@@ -13,6 +13,8 @@ urlpatterns = [
     path('captcha/', include('captcha.urls')),
     path('', include('apps.core.urls')),
     path('login/customer/', CustomerLoginView.as_view(), name='customer_login_alt'),
+    path('accounts/', include('allauth.socialaccount.providers.google.urls')),
+    path('accounts/', include('allauth.socialaccount.urls')),
     path('accounts/', include('apps.accounts.urls')),
     path('services/', include('apps.services.urls')),
     path('customers/', include('apps.customers.urls')),

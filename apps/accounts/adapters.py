@@ -3,9 +3,11 @@ import hashlib
 
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.mfa.adapter import DefaultMFAAdapter
+from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.utils import timezone
 
 from .emails import send_branded_email
 
@@ -81,3 +83,36 @@ class EncryptedMFAAdapter(DefaultMFAAdapter):
         from .mfa import is_mfa_required
 
         return not is_mfa_required(authenticator.user)
+
+
+class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
+    def is_open_for_signup(self, request, sociallogin):
+        return True
+
+    def populate_user(self, request, sociallogin, data):
+        user = super().populate_user(request, sociallogin, data)
+        if not getattr(user, "role", None):
+            user.role = user.Role.CUSTOMER
+        user.is_active = True
+        user.email_verified_at = timezone.now()
+        return user
+
+    def save_user(self, request, sociallogin, form=None):
+        user = super().save_user(request, sociallogin, form=form)
+        if getattr(user, "role", None) == user.Role.CUSTOMER:
+            from apps.customers.models import Customer
+            data = sociallogin.account.extra_data or {}
+            full_name = (
+                user.get_full_name()
+                or data.get("name")
+                or user.email.split("@")[0]
+            )
+            Customer.objects.get_or_create(
+                user=user,
+                defaults={
+                    "name": full_name,
+                    "email": user.email,
+                    "phone": getattr(user, "phone_number", "") or "",
+                },
+            )
+        return user

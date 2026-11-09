@@ -2,6 +2,7 @@
 Django>=5.2,<5.3
 argon2-cffi>=23.1
 django-allauth[mfa]>=65.18,<66
+requests>=2.31
 cryptography>=45.0
 django-axes>=8.3,<9
 django-simple-captcha>=0.6.3,<0.7

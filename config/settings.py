@@ -81,6 +81,8 @@ INSTALLED_APPS = [
     'django.contrib.humanize',
     'allauth',
     'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
     'allauth.mfa',
     'axes',
     'captcha',
@@ -284,6 +286,32 @@ ACCOUNT_REAUTHENTICATION_TIMEOUT = int(
 ) * 60
 ACCOUNT_LOGOUT_ON_GET = False
 ACCOUNT_RATE_LIMITS = {'login_failed': None}
+
+# Google Social Account Authentication
+SOCIALACCOUNT_ADAPTER = 'apps.accounts.adapters.CustomSocialAccountAdapter'
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
+SOCIALACCOUNT_LOGIN_ON_GET = True
+SOCIALACCOUNT_QUERY_EMAIL = True
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': os.getenv('GOOGLE_CLIENT_ID', ''),
+            'secret': os.getenv('GOOGLE_CLIENT_SECRET', ''),
+            'key': '',
+        },
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+        'OAUTH_PKCE_ENABLED': True,
+        'FETCH_USERINFO': True,
+    }
+}
 
 MFA_ADAPTER = 'apps.accounts.adapters.EncryptedMFAAdapter'
 MFA_FORMS = {
