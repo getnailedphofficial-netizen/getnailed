@@ -256,6 +256,11 @@ STAFF_INACTIVITY_TIMEOUT = int(os.getenv('STAFF_INACTIVITY_TIMEOUT_MINUTES', '60
 
 BRAND_NAME = 'Get Nailed Nail Bar and Spa'
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
+if not PUBLIC_BASE_URL:
+    if vercel_url:
+        PUBLIC_BASE_URL = f'https://{vercel_url}'
+    elif IS_VERCEL or IS_PRODUCTION:
+        PUBLIC_BASE_URL = 'https://getnailed.vercel.app'
 
 if not DEBUG and not PUBLIC_BASE_URL:
     raise ImproperlyConfigured('PUBLIC_BASE_URL must be configured outside development.')
@@ -363,7 +368,7 @@ BOOKING_ACCESS_TOKEN_TIMEOUT = timedelta(
 EMAIL_BACKEND = os.getenv(
     'DJANGO_EMAIL_BACKEND',
     'django.core.mail.backends.smtp.EmailBackend'
-    if IS_PRODUCTION
+    if (IS_PRODUCTION and not IS_VERCEL) or (IS_VERCEL and os.getenv('EMAIL_HOST_PASSWORD'))
     else 'django.core.mail.backends.console.EmailBackend',
 )
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
@@ -378,14 +383,14 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 if EMAIL_USE_TLS and EMAIL_USE_SSL:
     raise ImproperlyConfigured('EMAIL_USE_TLS and EMAIL_USE_SSL cannot both be enabled.')
-if IS_PRODUCTION:
+if IS_PRODUCTION and not IS_VERCEL:
     if EMAIL_BACKEND != 'django.core.mail.backends.smtp.EmailBackend':
         raise ImproperlyConfigured('Production requires the SMTP email backend.')
     required_email_settings = {
-        'EMAIL_HOST': os.getenv('EMAIL_HOST'),
+        'EMAIL_HOST': EMAIL_HOST,
         'EMAIL_HOST_USER': EMAIL_HOST_USER,
         'EMAIL_HOST_PASSWORD': EMAIL_HOST_PASSWORD,
-        'DEFAULT_FROM_EMAIL': os.getenv('DEFAULT_FROM_EMAIL'),
+        'DEFAULT_FROM_EMAIL': DEFAULT_FROM_EMAIL,
     }
     missing_email_settings = [
         name for name, value in required_email_settings.items() if not value
