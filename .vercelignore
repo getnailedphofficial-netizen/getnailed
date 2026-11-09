@@ -1,0 +1,15 @@
+.venv
+.venv/
+.build_venv
+.build_venv/
+datadump.json
+staticfiles
+staticfiles/
+*.sqlite3
+db.sqlite3
+*.bat
+backups/
+.git/
+.github/
+__pycache__/
+*.pyc
