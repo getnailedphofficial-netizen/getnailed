@@ -48,9 +48,15 @@
       </label>
       {{ filter_form.status }}
     </div>
-    <div class="col-lg-2 col-md-4">
+    <div class="col-lg-3 col-md-4">
+      <label class="form-label small fw-bold text-uppercase text-muted" for="{{ filter_form.service.id_for_label }}">
+        <i class="bi bi-stars me-1"></i> Service
+      </label>
+      {{ filter_form.service }}
+    </div>
+    <div class="col-lg-3 col-md-4">
       <label class="form-label small fw-bold text-uppercase text-muted" for="{{ filter_form.staff.id_for_label }}">
-        Technician
+        <i class="bi bi-person-badge me-1"></i> Specialist / Technician
       </label>
       {{ filter_form.staff }}
     </div>
@@ -66,15 +72,44 @@
       </label>
       {{ filter_form.sort }}
     </div>
-    <div class="col-lg-1 col-md-12 d-flex gap-2">
-      <button class="btn btn-brand w-100" type="submit" title="Apply filter & sort">
-        <i class="bi bi-funnel-fill"></i>
+    <div class="col-lg-2 col-md-12 d-flex gap-2">
+      <button class="btn btn-brand w-100 fw-semibold" type="submit" title="Apply filter & sort">
+        <i class="bi bi-funnel-fill me-1"></i> Filter
       </button>
       <a class="btn btn-outline-secondary" href="{% url 'bookings:manage' %}" title="Clear all filters">
         <i class="bi bi-x-circle"></i>
       </a>
     </div>
   </form>
+  {% if filter_form.service_staff_map_json %}
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      var svcSelect = document.getElementById("{{ filter_form.service.id_for_label }}");
+      var staffSelect = document.getElementById("{{ filter_form.staff.id_for_label }}");
+      if (!svcSelect || !staffSelect) return;
+      var svcStaffMap = {{ filter_form.service_staff_map_json|safe }};
+      var allStaffOptions = Array.from(staffSelect.options).map(function(opt) {
+        return { value: opt.value, text: opt.text };
+      });
+      function syncStaffByService() {
+        var svcId = svcSelect.value;
+        var currentStaff = staffSelect.value;
+        var allowed = svcId && svcStaffMap[svcId] ? svcStaffMap[svcId] : null;
+        staffSelect.innerHTML = "";
+        allStaffOptions.forEach(function(item) {
+          if (!item.value || !allowed || allowed.indexOf(item.value) !== -1) {
+            var opt = document.createElement("option");
+            opt.value = item.value;
+            opt.textContent = item.text;
+            if (item.value === currentStaff) opt.selected = true;
+            staffSelect.appendChild(opt);
+          }
+        });
+      }
+      svcSelect.addEventListener("change", syncStaffByService);
+    });
+  </script>
+  {% endif %}
 
   <!-- Export & Filter Summary row -->
   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3 pt-3 border-top">

@@ -315,10 +315,16 @@ class AppointmentFilterForm(forms.Form):
         choices=(("", "All statuses"), *Appointment.Status.choices),
         widget=forms.Select(attrs={**FORM_CONTROL, "class": "form-select"}),
     )
+    service = forms.ModelChoiceField(
+        required=False,
+        queryset=Service.objects.filter(is_active=True).select_related("category").order_by("category__name", "name"),
+        empty_label="All services",
+        widget=forms.Select(attrs={**FORM_CONTROL, "class": "form-select"}),
+    )
     staff = forms.ModelChoiceField(
         required=False,
-        queryset=User.objects.filter(role=User.Role.STAFF),
-        empty_label="All staff",
+        queryset=User.objects.filter(role=User.Role.STAFF, is_active=True).select_related("staff_profile"),
+        empty_label="All specialists",
         widget=forms.Select(attrs={**FORM_CONTROL, "class": "form-select"}),
     )
     source = forms.ChoiceField(
@@ -344,6 +350,30 @@ class AppointmentFilterForm(forms.Form):
         ),
         widget=forms.Select(attrs={**FORM_CONTROL, "class": "form-select"}),
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        staff_qs = (
+            User.objects.filter(role=User.Role.STAFF, is_active=True)
+            .select_related("staff_profile")
+            .prefetch_related("staff_profile__skills")
+            .order_by("first_name", "last_name", "email")
+        )
+        selected_service_id = self.data.get("service") if self.is_bound else self.initial.get("service")
+        if selected_service_id and str(selected_service_id).isdigit():
+            svc = Service.objects.filter(pk=int(selected_service_id)).first()
+            if svc:
+                qualified_ids = [
+                    u.pk for u in staff_qs
+                    if hasattr(u, "staff_profile") and u.staff_profile.can_perform(svc)
+                ]
+                staff_qs = staff_qs.filter(pk__in=qualified_ids)
+        self.fields["staff"].queryset = staff_qs
+        self.fields["staff"].label_from_instance = (
+            lambda u: f"{u.get_full_name()} — {u.staff_profile.specialty}"
+            if getattr(u, "staff_profile", None) and u.staff_profile.specialty
+            else (u.get_full_name() or u.email)
+        )
 
 
 class AppointmentStatusForm(forms.Form):
@@ -403,13 +433,36 @@ class AppointmentScheduleForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["assigned_staff"].queryset = User.objects.filter(
-            role=User.Role.STAFF,
-            is_active=True,
-            is_active_staff_member=True,
-            staff_profile__is_active=True,
-            staff_profile__availability_status=StaffProfile.Availability.AVAILABLE,
-        ).select_related("staff_profile").order_by("first_name", "last_name", "email")
+        qs = (
+            User.objects.filter(
+                role=User.Role.STAFF,
+                is_active=True,
+                is_active_staff_member=True,
+                staff_profile__is_active=True,
+                staff_profile__availability_status=StaffProfile.Availability.AVAILABLE,
+            )
+            .select_related("staff_profile")
+            .prefetch_related("staff_profile__skills")
+            .order_by("first_name", "last_name", "email")
+        )
+        services = []
+        if self.instance and self.instance.pk:
+            services = [
+                row.service
+                for row in self.instance.appointment_services.select_related("service").all()
+                if row.service
+            ]
+        if services:
+            qualified_ids = [
+                u.pk
+                for u in qs
+                if hasattr(u, "staff_profile")
+                and all(u.staff_profile.can_perform(s) for s in services)
+            ]
+            # Always keep current assigned staff selectable if already set and qualified
+            qs = qs.filter(pk__in=qualified_ids)
+        self.appointment_services_list = services
+        self.fields["assigned_staff"].queryset = qs
         self.fields["assigned_staff"].label_from_instance = (
             lambda u: f"{u.get_full_name()} — {u.staff_profile.specialty}"
             if getattr(u, "staff_profile", None) and u.staff_profile.specialty
@@ -420,6 +473,14 @@ class AppointmentScheduleForm(forms.ModelForm):
         cleaned_data = super().clean()
         appointment_date = cleaned_data.get("appointment_date")
         start_time = cleaned_data.get("start_time")
+        assigned_staff = cleaned_data.get("assigned_staff")
+        if assigned_staff and getattr(self, "appointment_services_list", None):
+            profile = getattr(assigned_staff, "staff_profile", None)
+            if profile and not all(profile.can_perform(s) for s in self.appointment_services_list):
+                self.add_error(
+                    "assigned_staff",
+                    f"{assigned_staff.get_full_name()} does not specialize in the selected service(s).",
+                )
         if appointment_date and start_time:
             value = timezone.make_aware(
                 datetime.combine(appointment_date, start_time),

@@ -29,12 +29,22 @@ class MonitoringFilterForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["staff"].queryset = User.objects.filter(
-            role=User.Role.STAFF,
-            is_active=True,
-            is_active_staff_member=True,
-            staff_profile__is_active=True,
-        ).order_by("first_name", "last_name", "email")
+        self.fields["staff"].queryset = (
+            User.objects.filter(
+                role=User.Role.STAFF,
+                is_active=True,
+                is_active_staff_member=True,
+                staff_profile__is_active=True,
+            )
+            .select_related("staff_profile")
+            .prefetch_related("staff_profile__skills")
+            .order_by("first_name", "last_name", "email")
+        )
+        self.fields["staff"].label_from_instance = (
+            lambda u: f"{u.get_full_name()} — {u.staff_profile.specialty}"
+            if getattr(u, "staff_profile", None) and u.staff_profile.specialty
+            else (u.get_full_name() or u.email)
+        )
 
 
 class ServiceStatusForm(forms.Form):

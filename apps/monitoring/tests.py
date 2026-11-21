@@ -249,3 +249,60 @@ class ServiceMonitoringTests(TestCase):
         response = self.client.get(reverse("monitoring:index"))
         self.assertNotContains(response, self.first.service_name)
         self.assertEqual(response.context["queue_count"], 0)
+
+    def test_specialization_filtering_and_google_get_login_protection(self):
+        from django.core.exceptions import ValidationError
+        from apps.bookings.forms import AppointmentScheduleForm
+        from apps.pos.forms import CheckoutItemForm
+
+        # 1. GET /accounts/google/login/ redirects to login page (never auto-logs in via Back button)
+        resp = self.client.get("/accounts/google/login/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp["Location"], reverse("accounts:login"))
+
+        # 2. Restrict self.staff to first_service only, and self.other_staff to second_service only
+        self.staff.staff_profile.skills.set([self.first_service])
+        self.other_staff.staff_profile.skills.set([self.second_service])
+
+        # 3. assign_service rejects assigning self.other_staff to self.first (Gel manicure)
+        with self.assertRaises(ValidationError):
+            assign_service(self.first, self.other_staff, actor=self.owner)
+
+        # 4. CheckoutItemForm rejects assigning self.other_staff to self.first_service
+        pos_form = CheckoutItemForm(
+            data={
+                "service": self.first_service.pk,
+                "assigned_staff": self.other_staff.pk,
+                "quantity": 1,
+            }
+        )
+        self.assertFalse(pos_form.is_valid())
+        self.assertIn("assigned_staff", pos_form.errors)
+
+        # 5. AppointmentScheduleForm filters assigned_staff queryset strictly to specialists
+        single_svc_appt = Appointment.objects.create(
+            customer=self.customer,
+            customer_name_snapshot=self.customer.full_name,
+            customer_email_snapshot=self.customer.email,
+            appointment_date=timezone.localdate(),
+            start_time=time(14, 0),
+            end_time=time(14, 45),
+            status=Appointment.Status.PENDING,
+            expires_at=timezone.now() + timedelta(hours=1),
+            verified_at=timezone.now(),
+        )
+        AppointmentService.objects.create(
+            appointment=single_svc_appt,
+            service=self.first_service,
+            service_name=self.first_service.name,
+            duration_minutes=self.first_service.duration_minutes,
+            price=self.first_service.price,
+            position=0,
+        )
+        sched_form = AppointmentScheduleForm(instance=single_svc_appt)
+        allowed_staff_pks = list(
+            sched_form.fields["assigned_staff"].queryset.values_list("pk", flat=True)
+        )
+        self.assertIn(self.staff.pk, allowed_staff_pks)
+        self.assertNotIn(self.other_staff.pk, allowed_staff_pks)
+

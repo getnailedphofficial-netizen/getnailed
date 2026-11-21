@@ -609,7 +609,24 @@ def reschedule(request, reference, token):
 
 
 def _filtered_appointments(request, queryset):
+    import json
+    from apps.accounts.models import User
+
     form = AppointmentFilterForm(request.GET or None)
+    all_staff = list(
+        User.objects.filter(role=User.Role.STAFF, is_active=True)
+        .select_related("staff_profile")
+        .prefetch_related("staff_profile__skills")
+    )
+    service_staff_map = {}
+    for svc in Service.objects.filter(is_active=True):
+        service_staff_map[str(svc.pk)] = [
+            str(u.pk)
+            for u in all_staff
+            if hasattr(u, "staff_profile") and u.staff_profile.can_perform(svc)
+        ]
+    form.service_staff_map_json = json.dumps(service_staff_map)
+
     if form.is_valid():
         search_query = form.cleaned_data.get("search")
         if search_query:
@@ -626,6 +643,10 @@ def _filtered_appointments(request, queryset):
             queryset = queryset.filter(appointment_date=form.cleaned_data["date"])
         if form.cleaned_data.get("status"):
             queryset = queryset.filter(status=form.cleaned_data["status"])
+        if form.cleaned_data.get("service"):
+            queryset = queryset.filter(
+                appointment_services__service=form.cleaned_data["service"]
+            ).distinct()
         if form.cleaned_data.get("staff"):
             queryset = queryset.filter(assigned_staff=form.cleaned_data["staff"])
         if form.cleaned_data.get("source"):

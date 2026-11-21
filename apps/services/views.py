@@ -700,7 +700,7 @@ def schedule_delete(request, pk):
 # Staff Time Blocks (Visual Weekly Grid & Management)
 # ---------------------------------------------------------------------------
 
-ROW_HEIGHT = 56
+ROW_HEIGHT = 72
 START_HOUR = 9
 END_HOUR = 22
 
@@ -962,20 +962,39 @@ def time_block_list(request):
     prev_day_date = ref_date - timedelta(days=1)
     next_day_date = ref_date + timedelta(days=1)
 
+    service_id = (request.GET.get("service") or "").strip()
+    selected_service = None
+    if service_id and service_id.isdigit():
+        selected_service = Service.objects.filter(pk=int(service_id), is_active=True).first()
+
+    staff_qs = (
+        User.objects.filter(role=User.Role.STAFF, is_active=True)
+        .select_related("staff_profile")
+        .prefetch_related("staff_profile__skills")
+        .order_by("first_name", "last_name")
+    )
+    if selected_service:
+        qualified_ids = [
+            u.pk for u in staff_qs
+            if hasattr(u, "staff_profile") and u.staff_profile.can_perform(selected_service)
+        ]
+        staff_qs = staff_qs.filter(pk__in=qualified_ids)
+    staff_list = list(staff_qs)
+
     staff_id = request.GET.get("staff")
     selected_staff = None
     if staff_id and staff_id.isdigit():
-        selected_staff = User.objects.filter(role=User.Role.STAFF, pk=int(staff_id)).first()
+        selected_staff = next((u for u in staff_list if u.pk == int(staff_id)), None)
     elif request.user.is_service_staff:
         selected_staff = request.user
         staff_id = str(request.user.id)
-
-    staff_list = User.objects.filter(role=User.Role.STAFF, is_active=True).order_by("first_name", "last_name")
 
     # Table view data (preserves pagination & existing table list)
     blocks_qs = StaffTimeBlock.objects.select_related("staff").order_by("-date", "start_time")
     if selected_staff:
         blocks_qs = blocks_qs.filter(staff=selected_staff)
+    elif selected_service:
+        blocks_qs = blocks_qs.filter(staff__in=staff_list)
     page_obj = Paginator(blocks_qs, 20).get_page(request.GET.get("page"))
 
     # Grid view data
@@ -986,6 +1005,8 @@ def time_block_list(request):
     ).select_related("staff").order_by("date", "start_time")
     if selected_staff:
         week_blocks_qs = week_blocks_qs.filter(staff=selected_staff)
+    elif selected_service:
+        week_blocks_qs = week_blocks_qs.filter(staff__in=staff_list)
 
     week_appts_qs = (
         Appointment.objects.filter(
@@ -1005,6 +1026,8 @@ def time_block_list(request):
     )
     if selected_staff:
         week_appts_qs = week_appts_qs.filter(assigned_staff=selected_staff)
+    elif selected_service:
+        week_appts_qs = week_appts_qs.filter(assigned_staff__in=staff_list)
 
     total_week_blocks = week_blocks_qs.count()
     total_week_appointments = week_appts_qs.count()
@@ -1055,6 +1078,11 @@ def time_block_list(request):
             "tech": tech,
             "tech_id": tech.pk,
             "tech_name": tech.get_full_name() or tech.email,
+            "tech_specialty": (
+                tech.staff_profile.specialty
+                if getattr(tech, "staff_profile", None) and tech.staff_profile.specialty
+                else "Nail Specialist"
+            ),
             "blocks": [b for b in tech_blocks if not b.get("is_all_day")],
             "all_day_blocks": [b for b in tech_blocks if b.get("is_all_day")],
         })
@@ -1079,6 +1107,9 @@ def time_block_list(request):
             "staff_id": str(selected_staff.pk) if selected_staff else "",
             "selected_staff": selected_staff,
             "staff_list": staff_list,
+            "all_services": Service.objects.filter(is_active=True).select_related("category").order_by("category__name", "name"),
+            "selected_service_id": str(selected_service.pk) if selected_service else "",
+            "selected_service": selected_service,
             "today": today,
             "ref_date": ref_date,
             "ref_date_iso": ref_date.isoformat(),
@@ -1273,6 +1304,21 @@ def walk_in_technicians(request):
     from .availability import get_walk_in_technicians_status
 
     data = get_walk_in_technicians_status()
+    selected_service_id = (request.GET.get("service") or "").strip()
+    if selected_service_id and selected_service_id.isdigit():
+        filtered_techs = [
+            t for t in data["technicians"]
+            if not t.get("skill_ids") or selected_service_id in t.get("skill_ids", [])
+        ]
+        data["technicians"] = filtered_techs
+        data["available_count"] = sum(1 for t in filtered_techs if t["is_available"])
+        data["busy_count"] = sum(1 for t in filtered_techs if t["status"] == "IN_SERVICE")
+        data["break_count"] = sum(1 for t in filtered_techs if t["status"] == "ON_BREAK")
+        data["off_duty_count"] = sum(1 for t in filtered_techs if t["status"] in ("OFF_DUTY", "UPCOMING", "SHIFT_ENDED"))
+
+    data["all_services"] = Service.objects.filter(is_active=True).select_related("category").order_by("category__name", "name")
+    data["selected_service_id"] = selected_service_id
+
     if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.GET.get("format") == "json":
         # Safe JSON serializable
         json_techs = []

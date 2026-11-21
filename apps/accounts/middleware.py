@@ -17,6 +17,12 @@ class SessionSecurityMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Prevent Back-button GET requests to /accounts/google/login/ from auto-logging in or showing raw allauth screen
+        if request.method == "GET" and request.path.rstrip("/") == "/accounts/google/login":
+            if request.user.is_authenticated:
+                return redirect("core:dashboard_router")
+            return redirect("accounts:login")
+
         if request.user.is_authenticated:
             timeout = self._timeout_for(request.user)
             if timeout:
@@ -28,6 +34,14 @@ class SessionSecurityMiddleware:
                     return redirect(settings.LOGIN_URL)
                 request.session[self.LAST_ACTIVITY_KEY] = now
                 request.session.set_expiry(timeout)
+            # Keep socialaccount OAuth authentication timestamp fresh while session is active
+            auth_methods = request.session.get("account_authentication_methods", [])
+            if auth_methods and not request.user.has_usable_password():
+                now_ts = time.time()
+                for m in auth_methods:
+                    if isinstance(m, dict) and m.get("method") == "socialaccount":
+                        m["at"] = now_ts
+                request.session["account_authentication_methods"] = auth_methods
 
         response = self.get_response(request)
         if getattr(request, "_flush_sessions_after_security_change", False):
@@ -36,12 +50,9 @@ class SessionSecurityMiddleware:
                 invalidate_user_sessions(user)
                 logout(request)
 
-        # Prevent browser back/forward cache (bfcache) from retaining protected pages after logout
-        if (
-            request.user.is_authenticated
-            or request.path.startswith(("/dashboard", "/pos", "/services", "/monitoring", "/reports", "/customers", "/bookings", "/audittrail", "/forecasting"))
-        ):
-            response["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        # Prevent browser back/forward cache (bfcache) from retaining any dynamic or protected pages
+        if not request.path.startswith(("/static/", "/media/")):
+            response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
             response["Pragma"] = "no-cache"
             response["Expires"] = "0"
 

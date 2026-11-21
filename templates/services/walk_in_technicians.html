@@ -69,12 +69,29 @@
 
 <!-- Technician Roster Cards -->
 <div class="content-card shadow-sm">
-  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 pb-2 border-bottom">
-    <h5 class="mb-0 fw-bold"><i class="bi bi-person-lines-fill me-2 text-muted"></i>Technician Availability Roster</h5>
-    <div class="d-flex gap-2">
-      <span class="badge bg-success text-white px-2 py-1"><i class="bi bi-check-circle me-1"></i>{{ available_count }} Walk-in Ready</span>
-      <span class="badge bg-light text-dark border px-2 py-1">{{ technicians|length }} Total Staff</span>
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3 pb-3 border-bottom">
+    <div>
+      <h5 class="mb-0 fw-bold"><i class="bi bi-person-lines-fill me-2 text-muted"></i>Technician Availability Roster</h5>
+      <small class="text-muted">Filter by treatment below to display only specialists qualified for that exact service.</small>
     </div>
+    <form method="get" class="d-flex align-items-center flex-wrap gap-2">
+      <select name="service" class="form-select" style="min-width: 280px;" onchange="this.form.submit()">
+        <option value="">All Services &amp; Specialties ({{ technicians|length }} Specialists)</option>
+        {% regroup all_services by category.name as service_groups %}
+        {% for group in service_groups %}
+          <optgroup label="{{ group.grouper }}">
+            {% for svc in group.list %}
+              <option value="{{ svc.pk }}" {% if selected_service_id == svc.pk|stringformat:"s" %}selected{% endif %}>
+                {{ svc.name }} — ₱{{ svc.price|floatformat:2 }} ({{ svc.duration_minutes }}m)
+              </option>
+            {% endfor %}
+          </optgroup>
+        {% endfor %}
+      </select>
+      {% if selected_service_id %}
+        <a href="{% url 'services:walk_in_technicians' %}" class="btn btn-outline-secondary">Reset</a>
+      {% endif %}
+    </form>
   </div>
 
   <div class="row g-3">
@@ -131,7 +148,7 @@
             <!-- Action buttons -->
             <div class="mt-2 pt-2 border-top d-flex gap-2">
               {% if tech.is_available %}
-                <a class="btn btn-brand btn-sm w-100 fw-semibold" href="{% url 'pos:index' %}?assigned_staff={{ tech.staff_id }}">
+                <a class="btn btn-brand btn-sm w-100 fw-semibold" href="{% url 'pos:index' %}?assigned_staff={{ tech.staff_id }}{% if selected_service_id %}&amp;service={{ selected_service_id }}{% endif %}">
                   <i class="bi bi-cart-plus me-1"></i> Assign Walk-In (POS)
                 </a>
               {% else %}

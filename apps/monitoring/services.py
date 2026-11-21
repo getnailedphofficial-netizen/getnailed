@@ -170,10 +170,10 @@ def assign_service(item, staff, *, actor):
         raise PermissionDenied("You cannot assign services.")
     with transaction.atomic():
         item = AppointmentService.objects.select_for_update().select_related(
-            "appointment"
+            "appointment", "service"
         ).get(pk=item.pk)
         if staff is not None:
-            staff = User.objects.select_for_update().filter(
+            staff = User.objects.select_for_update().select_related("staff_profile").filter(
                 pk=staff.pk,
                 role=User.Role.STAFF,
                 is_active=True,
@@ -182,6 +182,10 @@ def assign_service(item, staff, *, actor):
             ).first()
             if staff is None:
                 raise ValidationError("The selected staff member is unavailable.")
+            if item.service and hasattr(staff, "staff_profile") and not staff.staff_profile.can_perform(item.service):
+                raise ValidationError(
+                    f"{staff.get_full_name() or staff.email} does not specialize in {item.service_name}."
+                )
         item.assigned_staff = staff
         item.save(update_fields=("assigned_staff", "updated_at"))
 

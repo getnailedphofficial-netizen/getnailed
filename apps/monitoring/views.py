@@ -72,8 +72,23 @@ def _board_context(request):
         AppointmentService.Status.COMPLETED: "Completed / Confirmed Done",
     }
 
+    all_staff_list = list(filter_form.fields["staff"].queryset)
+    for u in all_staff_list:
+        u.display_label = (
+            f"{u.get_full_name()} — {u.staff_profile.specialty}"
+            if getattr(u, "staff_profile", None) and u.staff_profile.specialty
+            else (u.get_full_name() or u.email)
+        )
+
     current_ongoing_services = []
     for item in items:
+        if item.service:
+            item.qualified_staff = [
+                u for u in all_staff_list
+                if hasattr(u, "staff_profile") and u.staff_profile.can_perform(item.service)
+            ]
+        else:
+            item.qualified_staff = all_staff_list
         item.next_statuses = [
             (status, action_labels.get(status, labels[status]))
             for status in allowed_transitions(item, request.user)
@@ -180,16 +195,40 @@ def update_status(request, pk, status):
 @capability_required(CAPABILITY_ASSIGN_SERVICES)
 @require_http_methods(["GET"])
 def assignments(request):
-    items = (
+    items = list(
         visible_work_items(request.user)
-        .select_related("appointment", "assigned_staff")
+        .select_related("appointment", "assigned_staff", "service")
         .order_by("appointment__appointment_date", "appointment__start_time", "position")
     )
-    form = ServiceAssignmentForm()
+    all_staff = list(
+        User.objects.filter(
+            role=User.Role.STAFF,
+            is_active=True,
+            is_active_staff_member=True,
+            staff_profile__is_active=True,
+        )
+        .select_related("staff_profile")
+        .prefetch_related("staff_profile__skills")
+        .order_by("first_name", "last_name", "email")
+    )
+    for u in all_staff:
+        u.display_label = (
+            f"{u.get_full_name()} — {u.staff_profile.specialty}"
+            if getattr(u, "staff_profile", None) and u.staff_profile.specialty
+            else (u.get_full_name() or u.email)
+        )
+    for item in items:
+        if item.service:
+            item.qualified_staff = [
+                u for u in all_staff
+                if hasattr(u, "staff_profile") and u.staff_profile.can_perform(item.service)
+            ]
+        else:
+            item.qualified_staff = all_staff
     return render(
         request,
         "monitoring/assignments.html",
-        {"items": items, "staff_choices": form.fields["assigned_staff"].queryset},
+        {"items": items, "staff_choices": all_staff},
     )
 
 

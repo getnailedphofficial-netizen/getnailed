@@ -31,12 +31,12 @@
   <span class="small fw-bold text-muted text-uppercase text-nowrap me-1">
     <i class="bi bi-people-fill me-1"></i> Technician:
   </span>
-  <a href="?date={{ week_start|date:'Y-m-d' }}{% if view_mode != 'grid' %}&view={{ view_mode }}{% endif %}" 
+  <a href="?date={{ week_start|date:'Y-m-d' }}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}{% if view_mode != 'grid' %}&view={{ view_mode }}{% endif %}" 
      class="btn btn-sm rounded-pill px-3 text-nowrap {% if not selected_staff %}btn-dark text-white fw-bold shadow-sm{% else %}btn-outline-secondary border bg-white text-dark{% endif %}">
     All Technicians ({{ staff_list|length }})
   </a>
   {% for st in staff_list %}
-    <a href="?date={{ week_start|date:'Y-m-d' }}&staff={{ st.pk }}{% if view_mode != 'grid' %}&view={{ view_mode }}{% endif %}" 
+    <a href="?date={{ week_start|date:'Y-m-d' }}&staff={{ st.pk }}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}{% if view_mode != 'grid' %}&view={{ view_mode }}{% endif %}" 
        class="btn btn-sm rounded-pill px-3 text-nowrap {% if selected_staff.pk == st.pk %}btn-dark text-white fw-bold shadow-sm{% else %}btn-outline-secondary border bg-white text-dark{% endif %}">
       {{ st.get_full_name|default:st.email }}
     </a>
@@ -45,17 +45,35 @@
 
 <!-- Main Time Blocking Card -->
 <div class="time-blocking-card">
-  <!-- Toolbar: Staff selector, Week navigation, View toggles -->
+  <!-- Toolbar: Staff selector, Service selector, Week navigation, View toggles -->
   <div class="tb-toolbar">
     <div class="d-flex align-items-center flex-wrap gap-3">
+      <!-- Service / Specialty Filter -->
+      <div class="d-flex align-items-center gap-2">
+        <label for="tbServiceSelect" class="small fw-bold text-secondary mb-0">Service:</label>
+        <select class="form-select form-select-sm" id="tbServiceSelect" style="min-width: 210px;" onchange="onServiceFilterChange(this.value)">
+          <option value="" {% if not selected_service_id %}selected{% endif %}>All Services &amp; Specialties</option>
+          {% regroup all_services by category.name as tb_svc_groups %}
+          {% for group in tb_svc_groups %}
+            <optgroup label="{{ group.grouper }}">
+              {% for svc in group.list %}
+                <option value="{{ svc.pk }}" {% if selected_service_id == svc.pk|stringformat:"s" %}selected{% endif %}>
+                  {{ svc.name }}
+                </option>
+              {% endfor %}
+            </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+
       <!-- Staff Filter -->
       <div class="d-flex align-items-center gap-2">
-        <label for="tbStaffSelect" class="small fw-bold text-secondary mb-0">Technician:</label>
-        <select class="form-select form-select-sm" id="tbStaffSelect" style="min-width: 190px;" onchange="onStaffFilterChange(this.value)">
-          <option value="" {% if not selected_staff %}selected{% endif %}>All Technicians</option>
+        <label for="tbStaffSelect" class="small fw-bold text-secondary mb-0">Specialist:</label>
+        <select class="form-select form-select-sm" id="tbStaffSelect" style="min-width: 210px;" onchange="onStaffFilterChange(this.value)">
+          <option value="" {% if not selected_staff %}selected{% endif %}>All Qualified Specialists ({{ staff_list|length }})</option>
           {% for st in staff_list %}
             <option value="{{ st.pk }}" {% if selected_staff.pk == st.pk %}selected{% endif %}>
-              {{ st.get_full_name|default:st.email }}
+              {{ st.get_full_name|default:st.email }}{% if st.staff_profile.specialty %} — {{ st.staff_profile.specialty }}{% endif %}
             </option>
           {% endfor %}
         </select>
@@ -64,26 +82,26 @@
       <!-- Navigation (Day vs Week) -->
       <div class="d-flex align-items-center gap-1">
         {% if view_mode == 'day' %}
-          <a class="btn btn-outline-secondary btn-sm" href="?date={{ prev_day_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view=day" title="Previous Day">
+          <a class="btn btn-outline-secondary btn-sm" href="?date={{ prev_day_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view=day" title="Previous Day">
             <i class="bi bi-chevron-left"></i>
           </a>
-          <a class="btn btn-outline-secondary btn-sm px-2 fw-semibold" href="?date={{ current_week_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view=day">
+          <a class="btn btn-outline-secondary btn-sm px-2 fw-semibold" href="?date={{ current_week_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view=day">
             Today
           </a>
-          <a class="btn btn-outline-secondary btn-sm" href="?date={{ next_day_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view=day" title="Next Day">
+          <a class="btn btn-outline-secondary btn-sm" href="?date={{ next_day_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view=day" title="Next Day">
             <i class="bi bi-chevron-right"></i>
           </a>
           <span class="small fw-bold text-dark px-2">
             {{ ref_date|date:"l, M d, Y" }}
           </span>
         {% else %}
-          <a class="btn btn-outline-secondary btn-sm" href="?date={{ prev_week_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view={{ view_mode }}" title="Previous week">
+          <a class="btn btn-outline-secondary btn-sm" href="?date={{ prev_week_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view={{ view_mode }}" title="Previous week">
             <i class="bi bi-chevron-left"></i>
           </a>
-          <a class="btn btn-outline-secondary btn-sm px-2 fw-semibold" href="?date={{ current_week_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view={{ view_mode }}">
+          <a class="btn btn-outline-secondary btn-sm px-2 fw-semibold" href="?date={{ current_week_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view={{ view_mode }}">
             Today
           </a>
-          <a class="btn btn-outline-secondary btn-sm" href="?date={{ next_week_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view={{ view_mode }}" title="Next week">
+          <a class="btn btn-outline-secondary btn-sm" href="?date={{ next_week_date }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view={{ view_mode }}" title="Next week">
             <i class="bi bi-chevron-right"></i>
           </a>
           <span class="small fw-bold text-dark px-2">
@@ -97,13 +115,13 @@
     <div class="d-flex align-items-center flex-wrap gap-2">
       <input type="date" class="form-control form-control-sm" style="width: 140px;" value="{{ ref_date|date:'Y-m-d' }}" onchange="onDateJump(this.value)" title="Jump to date">
       <div class="btn-group btn-group-sm" role="group" aria-label="View Mode">
-        <a class="btn {% if view_mode == 'day' %}btn-brand fw-bold shadow-xs{% else %}btn-outline-secondary{% endif %}" href="?date={{ ref_date_iso }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view=day" title="Day View (Spacious by Technician)">
+        <a class="btn {% if view_mode == 'day' %}btn-brand fw-bold shadow-xs{% else %}btn-outline-secondary{% endif %}" href="?date={{ ref_date_iso }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view=day" title="Day View (Spacious by Technician)">
           <i class="bi bi-calendar-day me-1"></i> Day View
         </a>
-        <a class="btn {% if view_mode == 'week' or view_mode == 'grid' %}btn-brand fw-bold shadow-xs{% else %}btn-outline-secondary{% endif %}" href="?date={{ ref_date_iso }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view=week" title="Week View (7 Days)">
+        <a class="btn {% if view_mode == 'week' or view_mode == 'grid' %}btn-brand fw-bold shadow-xs{% else %}btn-outline-secondary{% endif %}" href="?date={{ ref_date_iso }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view=week" title="Week View (7 Days)">
           <i class="bi bi-calendar3-week me-1"></i> Week View
         </a>
-        <a class="btn {% if view_mode == 'table' %}btn-brand fw-bold shadow-xs{% else %}btn-outline-secondary{% endif %}" href="?date={{ ref_date_iso }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view=table" title="List Table">
+        <a class="btn {% if view_mode == 'table' %}btn-brand fw-bold shadow-xs{% else %}btn-outline-secondary{% endif %}" href="?date={{ ref_date_iso }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view=table" title="List Table">
           <i class="bi bi-list-ul me-1"></i> List Table
         </a>
       </div>
@@ -125,17 +143,17 @@
     </div>
     <div class="tb-daypicker-bar">
       {% for dp in day_picker_days %}
-        <a href="?date={{ dp.date_iso }}{% if staff_id %}&staff={{ staff_id }}{% endif %}&view={{ view_mode }}" 
+        <a href="?date={{ dp.date_iso }}{% if staff_id %}&staff={{ staff_id }}{% endif %}{% if selected_service_id %}&service={{ selected_service_id }}{% endif %}&view={{ view_mode }}" 
            class="tb-daypicker-pill {% if dp.is_selected %}active{% endif %}"
            title="View schedule for {{ dp.day_name }}, {{ dp.date|date:'M d' }}">
           <span class="tb-daypicker-name">{{ dp.day_short }}</span>
           <span class="tb-daypicker-date">{{ dp.day_number }}</span>
           {% if dp.appts_count > 0 %}
-            <span class="badge {% if dp.is_selected %}bg-white text-dark{% else %}bg-primary text-white{% endif %} rounded-pill px-2 mt-1" style="font-size: 0.65rem;">
+            <span class="badge {% if dp.is_selected %}bg-white text-dark{% else %}bg-primary text-white{% endif %} rounded-pill px-2 mt-1" style="font-size: 0.78rem;">
               {{ dp.appts_count }} appt{{ dp.appts_count|pluralize }}
             </span>
           {% else %}
-            <span class="small mt-1" style="font-size: 0.65rem; opacity: 0.6;">No appts</span>
+            <span class="small mt-1" style="font-size: 0.76rem; opacity: 0.72;">No appts</span>
           {% endif %}
         </a>
       {% endfor %}
@@ -183,9 +201,9 @@
       {% for col in day_tech_columns %}
         <div class="tb-tech-header">
           <div class="d-flex justify-content-between align-items-center w-100">
-            <div class="text-start">
-              <span class="tb-tech-title text-truncate d-block fw-bold">{{ col.tech_name }}</span>
-              <small class="text-muted" style="font-size: 0.7rem;"><i class="bi bi-person-badge me-1"></i>Technician</small>
+            <div class="text-start min-w-0">
+              <span class="tb-tech-title text-truncate d-block fw-bold" style="font-size: 0.96rem;">{{ col.tech_name }}</span>
+              <small class="text-muted d-block text-truncate" style="font-size: 0.78rem;" title="{{ col.tech_specialty }}"><i class="bi bi-stars me-1"></i>{{ col.tech_specialty }}</small>
             </div>
             <button type="button" class="btn btn-outline-brand btn-xs tb-day-add-btn" 
                     onclick="openAddModalForDateAndStaff('{{ ref_date_iso }}', '{{ col.tech_id }}')" 
@@ -767,6 +785,17 @@
       url.searchParams.set('staff', staffId);
     } else {
       url.searchParams.delete('staff');
+    }
+    window.location.href = url.toString();
+  }
+
+  function onServiceFilterChange(serviceId) {
+    const url = new URL(window.location.href);
+    if (serviceId) {
+      url.searchParams.set('service', serviceId);
+      url.searchParams.delete('staff');
+    } else {
+      url.searchParams.delete('service');
     }
     window.location.href = url.toString();
   }

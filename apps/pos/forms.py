@@ -248,6 +248,15 @@ class CheckoutItemForm(forms.Form):
         cleaned_data = super().clean()
         if not cleaned_data.get("quantity"):
             cleaned_data["quantity"] = 1
+        service = cleaned_data.get("service")
+        assigned_staff = cleaned_data.get("assigned_staff")
+        if service and assigned_staff:
+            profile = getattr(assigned_staff, "staff_profile", None)
+            if profile and not profile.can_perform(service):
+                self.add_error(
+                    "assigned_staff",
+                    f"{assigned_staff.get_full_name()} does not specialize in {service.name}.",
+                )
         return cleaned_data
 
 

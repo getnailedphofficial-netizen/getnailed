@@ -63,9 +63,20 @@
       return '';
     }
 
-    // Bfcache restoration guard: if browser restores a page from memory cache, reload to verify session
+    // Bfcache restoration guard: if browser restores a page from memory cache, verify or redirect immediately
     window.addEventListener('pageshow', function(event) {
-      if (event.persisted || (window.performance && window.performance.navigation && window.performance.navigation.type === 2)) {
+      var navEntries = (window.performance && window.performance.getEntriesByType) ? window.performance.getEntriesByType('navigation') : [];
+      var isBackForward = event.persisted || (navEntries.length && navEntries[0].type === 'back_forward') || (window.performance && window.performance.navigation && window.performance.navigation.type === 2);
+      if (isBackForward) {
+        {% if user.is_authenticated %}
+        try {
+          if (sessionStorage.getItem('gn_just_logged_out') === '1') {
+            document.documentElement.style.display = 'none';
+            window.location.replace('/');
+            return;
+          }
+        } catch (e) {}
+        {% endif %}
         window.location.reload();
       }
     });
@@ -84,6 +95,16 @@
       } catch (e) {}
     })();
     {% else %}
+    // If this authenticated page was somehow restored after logout, immediately jump to landing page
+    (function() {
+      try {
+        if (sessionStorage.getItem('gn_just_logged_out') === '1') {
+          document.documentElement.style.display = 'none';
+          window.location.replace('/');
+          return;
+        }
+      } catch (e) {}
+    })();
     // Listen for logout form submission to trap history on logout
     document.addEventListener('DOMContentLoaded', function() {
       document.querySelectorAll('form[action*="logout"]').forEach(function(f) {

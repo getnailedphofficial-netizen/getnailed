@@ -65,7 +65,14 @@
           <form method="post">
             {% csrf_token %}
             <div class="mb-3">
-              <label class="form-label fw-bold" for="id_message_body" style="color: #2b181d;">Your Message</label>
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <label class="form-label fw-bold mb-0" for="id_message_body" style="color: #2b181d;">Your Message</label>
+                <div class="d-flex flex-wrap gap-1">
+                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5" onclick="document.getElementById('id_message_body').value='Hi Get Nailed Team! I would like to ask about my appointment schedule today.';">Ask About My Booking</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5" onclick="document.getElementById('id_message_body').value='Hi! I am slightly delayed in traffic and wanted to let you know before the 10-15 min grace period.';">Running Slightly Late</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5" onclick="document.getElementById('id_message_body').value='Hi! Which specialist do you recommend for Softgel Extensions / Nail Art or Lash Extensions?';">Ask Specialist Recommendation</button>
+                </div>
+              </div>
               <textarea id="id_message_body" name="body" rows="3" class="form-control rounded-4 p-3" style="border-color: #dfcbd4; font-size: 1rem;" placeholder="Type your question, reschedule note, or custom nail art inquiry..." required></textarea>
             </div>
             <div class="d-flex justify-content-between align-items-center">
@@ -198,6 +205,7 @@
                 <div class="d-flex gap-2 flex-wrap">
                   <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="document.getElementById('id_staff_reply').value='Hi {{ selected_customer.first_name }}! Friendly reminder from Get Nailed Salon regarding your booking today. Please reply to confirm your arrival (10-15 min grace period applies). Thank you!';">Insert Reminder</button>
                   <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="document.getElementById('id_staff_reply').value='Hi {{ selected_customer.first_name }}! Your appointment is approved. Present your promo code GETNAILED10 at checkout!';">Insert Promo Code</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="document.getElementById('id_staff_reply').value='Hi {{ selected_customer.first_name }}! Your specialist is ready for you at the branch. See you soon!';">Specialist Ready</button>
                 </div>
                 <button type="submit" class="btn btn-dark btn-lg px-4 py-2 rounded-pill fw-bold shadow-sm" style="background: linear-gradient(135deg, #2b181d, #8b4f5c); border: none;">
                   <i class="bi bi-reply-fill me-1"></i> Send Reply
@@ -211,6 +219,13 @@
       </div>
     </div>
   {% endif %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('[style*="max-height: 480px"]').forEach(function(box) {
+        box.scrollTop = box.scrollHeight;
+      });
+    });
+  </script>
 {% endblock %}
 
 

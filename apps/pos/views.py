@@ -427,8 +427,13 @@ def index(request):
         initial, initial_items = _appointment_initial(form, request.GET.get("appointment"))
         if initial:
             form = CheckoutForm(initial=initial)
-        elif request.GET.get("assigned_staff"):
-            initial_items = [{"assigned_staff": request.GET.get("assigned_staff")}]
+        elif request.GET.get("assigned_staff") or request.GET.get("service"):
+            row_init = {}
+            if request.GET.get("assigned_staff"):
+                row_init["assigned_staff"] = request.GET.get("assigned_staff")
+            if request.GET.get("service"):
+                row_init["service"] = request.GET.get("service")
+            initial_items = [row_init]
     item_formset = CheckoutItemFormSet(
         request.POST if request.method == "POST" else None,
         prefix="items",

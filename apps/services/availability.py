@@ -27,9 +27,12 @@ def get_walk_in_technicians_status(target_datetime=None):
     now_time = target_datetime.time()
     day_of_week = target_datetime.weekday()  # 0=Monday, 6=Sunday
 
-    staff_qs = User.objects.filter(role=User.Role.STAFF, is_active=True).select_related(
-        "staff_profile"
-    ).order_by("first_name", "last_name")
+    staff_qs = (
+        User.objects.filter(role=User.Role.STAFF, is_active=True)
+        .select_related("staff_profile")
+        .prefetch_related("staff_profile__skills")
+        .order_by("first_name", "last_name")
+    )
 
     # Prefetch today's schedules, blocks, and appointments for efficiency
     schedules = {
@@ -60,10 +63,15 @@ def get_walk_in_technicians_status(target_datetime=None):
         )
         schedule = schedules.get(staff.pk)
 
+        profile = getattr(staff, "staff_profile", None)
+        skills = [s for s in profile.skills.all() if s.is_active] if profile else []
         item = {
             "staff_id": staff.pk,
             "name": staff.get_full_name() or staff.email,
             "specialty": specialty,
+            "skill_ids": [str(s.pk) for s in skills],
+            "skill_ids_csv": ",".join(str(s.pk) for s in skills),
+            "skill_names": [s.name for s in skills],
             "status": "OFF_DUTY",
             "status_label": "Off Duty Today",
             "badge_class": "bg-secondary-subtle text-secondary border",
