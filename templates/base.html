@@ -53,8 +53,6 @@
     {% block public_content %}{% block public_body %}{% endblock %}{% endblock %}
   {% endif %}
 
-  {% include 'partials/mobile_bottom_nav.html' %}
-
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{% static 'js/app.js' %}?v={% now 'U' %}"></script>
   <script>
