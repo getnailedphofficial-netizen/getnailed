@@ -54,17 +54,7 @@
               </td>
               <td>{{ appt.assigned_staff.get_full_name|default:'No preference' }}</td>
               <td>
-                {% if appt.status == 'PENDING' %}
-                  <span class="badge bg-warning text-dark">{{ appt.get_status_display }}</span>
-                {% elif appt.status == 'APPROVED' %}
-                  <span class="badge bg-success">{{ appt.get_status_display }}</span>
-                {% elif appt.status == 'RESCHEDULED' %}
-                  <span class="badge bg-info text-dark">{{ appt.get_status_display }}</span>
-                {% elif appt.status == 'ONGOING' %}
-                  <span class="badge bg-primary">{{ appt.get_status_display }}</span>
-                {% else %}
-                  <span class="badge bg-secondary">{{ appt.get_status_display }}</span>
-                {% endif %}
+                <span class="status-pill status-{{ appt.status|lower }}">{{ appt.get_status_display }}</span>
               </td>
               <td class="text-end">
                 <div class="d-inline-flex gap-1">
@@ -125,11 +115,13 @@
       </table>
     </div>
   {% else %}
-    <div class="text-center py-5">
-      <div class="display-6 text-muted mb-3"><i class="bi bi-calendar-x"></i></div>
-      <h4 class="h6 text-muted mb-2">No upcoming appointments</h4>
-      <p class="text-muted small mb-3">You don't have any appointments scheduled right now.</p>
-      <a class="btn btn-brand btn-sm" href="{% url 'bookings:index' %}">Book your next visit</a>
+    <div class="text-center py-5 px-3 rounded-4" style="background: #fdf8fa; border: 1px dashed #e5c6d1;">
+      <i class="bi bi-calendar2-heart fs-1 d-block mb-2" style="color: #8b3d52;"></i>
+      <h4 class="h5 fw-bold text-dark mb-1">No upcoming appointments</h4>
+      <p class="text-muted small mb-3">Ready for your next nail care session? Pick your services and reserve a slot in seconds.</p>
+      <a class="btn btn-brand rounded-pill px-4" href="{% url 'bookings:index' %}">
+        <i class="bi bi-stars me-1"></i> Book Your Next Visit
+      </a>
     </div>
   {% endif %}
 </section>
@@ -171,13 +163,7 @@
               </td>
               <td>{{ appt.assigned_staff.get_full_name|default:'No preference' }}</td>
               <td>
-                {% if appt.status == 'COMPLETED' %}
-                  <span class="badge bg-success">{{ appt.get_status_display }}</span>
-                {% elif appt.status == 'CANCELLED' %}
-                  <span class="badge bg-danger">{{ appt.get_status_display }}</span>
-                {% else %}
-                  <span class="badge bg-secondary">{{ appt.get_status_display }}</span>
-                {% endif %}
+                <span class="status-pill status-{{ appt.status|lower }}">{{ appt.get_status_display }}</span>
               </td>
             </tr>
           {% endfor %}
@@ -185,7 +171,10 @@
       </table>
     </div>
   {% else %}
-    <p class="text-muted text-center py-4 mb-0">No past appointment history recorded yet.</p>
+    <div class="text-center py-4 px-3 rounded-4" style="background: #faf9f9; border: 1px dashed #e2d9dc;">
+      <i class="bi bi-clock-history fs-2 text-muted d-block mb-1 opacity-50"></i>
+      <p class="text-muted small mb-0">No past appointment history recorded yet.</p>
+    </div>
   {% endif %}
 </section>
 {% endblock %}
