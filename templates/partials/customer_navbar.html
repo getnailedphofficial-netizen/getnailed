@@ -247,6 +247,9 @@
           <a class="nav-link customer-nav-link {% if request.resolver_match.url_name == 'messages' %}active{% endif %}" href="{% url 'notifications:messages' %}">
             <i class="bi bi-chat-dots-fill"></i>
             <span>Messages</span>
+            {% if unread_messages_count and unread_messages_count > 0 %}
+              <span class="badge rounded-pill bg-danger ms-1">{{ unread_messages_count }}</span>
+            {% endif %}
           </a>
         </li>
       </ul>
@@ -301,12 +304,14 @@
                 <span>Account Security (2FA)</span>
               </a>
             </li>
+            {% if user.has_usable_password %}
             <li>
               <a class="dropdown-item py-2 rounded-2 d-flex align-items-center gap-2" href="{% url 'accounts:password_change' %}">
                 <i class="bi bi-key text-muted fs-6"></i>
                 <span>Change password</span>
               </a>
             </li>
+            {% endif %}
             <li>
               <a class="dropdown-item py-2 rounded-2 d-flex align-items-center gap-2" href="{% url 'accounts:logout_all_devices' %}">
                 <i class="bi bi-shield-x text-muted fs-6"></i>

@@ -98,6 +98,10 @@
         <i class="bi bi-kanban"></i>
         <span>Service Monitoring</span>
       </a>
+      <a href="{% url 'services:staff_list' %}">
+        <i class="bi bi-person-badge"></i>
+        <span>Staff Profiles &amp; Skills</span>
+      </a>
       <a href="{% url 'services:schedule_list' %}">
         <i class="bi bi-calendar3-range"></i>
         <span>Staff Schedules</span>
@@ -128,13 +132,23 @@
       </a>
     {% endif %}
 
-    <a href="{% url 'notifications:messages' %}">
-      <i class="bi bi-chat-dots"></i>
-      <span>Messages</span>
+    <a href="{% url 'notifications:messages' %}" class="d-flex align-items-center justify-content-between">
+      <span class="d-flex align-items-center gap-2">
+        <i class="bi bi-chat-dots"></i>
+        <span>Messages</span>
+      </span>
+      {% if unread_messages_count and unread_messages_count > 0 %}
+        <span class="badge rounded-pill bg-danger">{{ unread_messages_count }}</span>
+      {% endif %}
     </a>
-    <a href="{% url 'notifications:index' %}">
-      <i class="bi bi-bell"></i>
-      <span>Notifications</span>
+    <a href="{% url 'notifications:index' %}" class="d-flex align-items-center justify-content-between">
+      <span class="d-flex align-items-center gap-2">
+        <i class="bi bi-bell"></i>
+        <span>Notifications</span>
+      </span>
+      {% if unread_notifications_count and unread_notifications_count > 0 %}
+        <span class="badge rounded-pill bg-danger">{{ unread_notifications_count }}</span>
+      {% endif %}
     </a>
   </nav>
 </aside>

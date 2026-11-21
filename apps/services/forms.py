@@ -87,7 +87,7 @@ class StaffProfileForm(OwnerManagedFormMixin, forms.ModelForm):
         widgets = {
             "user": forms.Select(attrs={"class": "form-select"}),
             "specialty": forms.TextInput(attrs=FORM_CONTROL),
-            "skills": forms.SelectMultiple(attrs={"class": "form-select", "size": 6}),
+            "skills": forms.CheckboxSelectMultiple(),
             "availability_status": forms.Select(attrs={"class": "form-select"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }

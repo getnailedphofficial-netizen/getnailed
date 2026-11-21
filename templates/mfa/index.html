@@ -10,12 +10,22 @@
         <i class="bi bi-shield-check fs-2"></i>
       </div>
       <div>
-        <h3 class="h5 mb-1">Gmail Verification (2FA) is Active</h3>
-        <p class="text-muted mb-0">Every time you sign in, a secure 6-digit verification code is sent directly to your Gmail address (<strong>{{ request.user.email }}</strong>).</p>
+        <h3 class="h5 mb-1">Google &amp; Gmail Verification (2FA) is Active</h3>
+        <p class="text-muted mb-0">Your account is protected with verified Gmail / Google Sign-In authentication (<strong>{{ request.user.email }}</strong>).</p>
       </div>
     </div>
     <div class="alert alert-light border small">
-      <i class="bi bi-info-circle me-1 text-primary"></i> No authenticator app is needed. Your Gmail is used for fast and secure verification.
+      <i class="bi bi-info-circle me-1 text-primary"></i> No separate authenticator app is needed. Your Google account is used for fast and secure verification.
+    </div>
+  {% elif not request.user.has_usable_password %}
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="rounded-circle bg-success-subtle p-3 text-success">
+        <i class="bi bi-google fs-2"></i>
+      </div>
+      <div>
+        <h3 class="h5 mb-1">Google OAuth 2.0 Security is Active</h3>
+        <p class="text-muted mb-0">Your {{ request.user.get_role_display }} account signs in directly via Google OAuth 2.0 (<strong>{{ request.user.email }}</strong>) and is protected by your Google account's 2-Step Verification.</p>
+      </div>
     </div>
   {% elif authenticators.totp %}
     <h3 class="h5">Authenticator app is active</h3>

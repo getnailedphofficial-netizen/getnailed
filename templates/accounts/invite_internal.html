@@ -94,7 +94,12 @@
                       </label>
                     </div>
                   </td>
-                  <td class="text-end">
+                  <td class="text-end text-nowrap">
+                    {% if acct.staff_profile %}
+                      <a href="{% url 'services:staff_update' acct.staff_profile.pk %}" class="btn btn-outline-dark btn-sm me-1" title="Choose exact services this specialist performs">
+                        <i class="bi bi-stars me-1"></i>Edit Skills
+                      </a>
+                    {% endif %}
                     <button type="submit" class="btn btn-brand btn-sm">
                       <i class="bi bi-check2-circle me-1"></i>Save Access
                     </button>

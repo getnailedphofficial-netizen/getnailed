@@ -9,7 +9,27 @@
     {% csrf_token %}
     {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
     {% for field in form %}
-      {% if field.field.widget.input_type == 'checkbox' %}
+      {% if field.name == 'skills' %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <label class="form-label mb-0">{{ field.label }}</label>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-outline-secondary btn-xs" onclick="document.querySelectorAll('input[name=&quot;skills&quot;]').forEach(c => c.checked = true)">Select All</button>
+              <button type="button" class="btn btn-outline-secondary btn-xs" onclick="document.querySelectorAll('input[name=&quot;skills&quot;]').forEach(c => c.checked = false)">Clear All</button>
+            </div>
+          </div>
+          <div class="p-3 rounded-3 border bg-light" style="max-height: 320px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px;">
+            {% for checkbox in field %}
+              <label class="d-flex align-items-center gap-2 p-2 rounded-2 bg-white border mb-0" style="cursor: pointer; font-weight: 500;">
+                {{ checkbox.tag }}
+                <span>{{ checkbox.choice_label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+          {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+        </div>
+      {% elif field.field.widget.input_type == 'checkbox' %}
         <div class="form-check mb-3">
           {{ field }}
           <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>

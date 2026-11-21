@@ -107,6 +107,15 @@ class SecurePasswordChangeView(PasswordChangeView):
     template_name = "accounts/password_change.html"
     form_class = SecurePasswordChangeForm
 
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not request.user.has_usable_password():
+            messages.info(
+                request,
+                "Your account is secured via Google Sign-In and does not use a separate salon password.",
+            )
+            return redirect("core:dashboard_router")
+        return super().dispatch(request, *args, **kwargs)
+
     def form_valid(self, form):
         user = form.save()
         is_customer = getattr(user, "is_customer", False)
