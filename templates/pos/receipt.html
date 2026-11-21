@@ -66,11 +66,16 @@
         VOIDED<br><small>{{ sale.void_reason }}</small>
       </div>
     {% endif %}
-    <p class="receipt-thanks">Thank you for visiting.</p>
+    <p class="receipt-thanks">Thank you for visiting Get Nailed Nail Bar &amp; Spa — Plaridel, Bulacan.</p>
     <div class="receipt-actions">
-      <button type="button" onclick="window.print()">Print receipt</button>
-      <a href="{% url 'pos:index' %}">New sale</a>
-      <a href="{% url 'pos:history' %}">History</a>
+      <button type="button" onclick="window.print()">Print / Save PDF</button>
+      {% if is_customer_receipt %}
+        <a href="{% url 'core:customer_appointments' %}">Back to My Appointments</a>
+        <a href="{% url 'core:customer_dashboard' %}">Customer Portal</a>
+      {% else %}
+        <a href="{% url 'pos:index' %}">New sale</a>
+        <a href="{% url 'pos:history' %}">History</a>
+      {% endif %}
     </div>
   </main>
 </body>

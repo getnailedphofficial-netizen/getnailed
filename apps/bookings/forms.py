@@ -57,11 +57,11 @@ from apps.bookings.security import (
 
 class PublicContactForm(forms.Form):
     branch = forms.ChoiceField(
-        label="Preferred Salon Branch / Location",
-        choices=Appointment.Branch.choices,
+        label="Salon Branch / Location",
+        choices=((Appointment.Branch.PLARIDEL, "Plaridel Branch (Unit 14 G/F Rocka Commercial Complex, Tabang, Plaridel, Bulacan)"),),
         initial=Appointment.Branch.PLARIDEL,
         required=False,
-        widget=forms.Select(attrs={**FORM_CONTROL, "class": "form-select"}),
+        widget=forms.HiddenInput(),
     )
     customer = forms.ModelChoiceField(
         queryset=Customer.objects.none(),
@@ -216,7 +216,7 @@ class PublicServiceForm(forms.Form):
 class PublicScheduleForm(forms.Form):
     branch = forms.ChoiceField(
         label="Salon Branch",
-        choices=Appointment.Branch.choices,
+        choices=((Appointment.Branch.PLARIDEL, "Plaridel Branch (Unit 14 G/F Rocka Commercial Complex, Tabang, Plaridel, Bulacan)"),),
         initial=Appointment.Branch.PLARIDEL,
         required=False,
         widget=forms.Select(attrs={**FORM_CONTROL, "class": "form-select"}),

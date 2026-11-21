@@ -146,6 +146,7 @@
             <th>Service(s)</th>
             <th>Staff</th>
             <th>Status</th>
+            <th class="text-end">Receipt</th>
           </tr>
         </thead>
         <tbody>
@@ -165,6 +166,15 @@
               <td>
                 <span class="status-pill status-{{ appt.status|lower }}">{{ appt.get_status_display }}</span>
               </td>
+              <td class="text-end">
+                {% if appt.sale %}
+                  <a href="{% url 'core:customer_receipt' appt.sale.receipt_number %}" target="_blank" class="btn btn-outline-dark btn-sm rounded-pill px-3">
+                    <i class="bi bi-receipt me-1"></i>View / Print Receipt
+                  </a>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
             </tr>
           {% endfor %}
         </tbody>
@@ -177,5 +187,51 @@
     </div>
   {% endif %}
 </section>
+
+{% if customer_sales %}
+<!-- Official Salon Receipts Section -->
+<section class="content-card mt-4" id="receipts">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <div class="eyebrow">OFFICIAL RECEIPTS</div>
+      <h3 class="h5 mb-0">Paid Transactions &amp; Printable Receipts ({{ customer_sales|length }})</h3>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Receipt #</th>
+          <th>Date</th>
+          <th>Services</th>
+          <th>Payment Method</th>
+          <th>Total Paid</th>
+          <th class="text-end">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sale in customer_sales %}
+          <tr>
+            <td><span class="fw-bold font-monospace">{{ sale.receipt_number }}</span></td>
+            <td>{{ sale.created_at|date:"M d, Y h:i A" }}</td>
+            <td>
+              {% for item in sale.items.all %}
+                <span class="badge bg-light text-dark border">{{ item.service_name }}</span>
+              {% endfor %}
+            </td>
+            <td>{{ sale.payment.get_payment_method_display|default:"Cash" }}</td>
+            <td class="fw-bold">₱{{ sale.total|floatformat:2 }}</td>
+            <td class="text-end">
+              <a href="{% url 'core:customer_receipt' sale.receipt_number %}" target="_blank" class="btn btn-brand btn-sm rounded-pill px-3">
+                <i class="bi bi-printer me-1"></i>Print / Save PDF
+              </a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
 {% endblock %}
 

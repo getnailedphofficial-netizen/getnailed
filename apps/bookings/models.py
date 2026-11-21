@@ -181,7 +181,7 @@ class AppointmentQuerySet(models.QuerySet):
 
 class Appointment(models.Model):
     class Branch(models.TextChoices):
-        PLARIDEL = "PLARIDEL", "Plaridel Branch (Rocka Commercial Complex)"
+        PLARIDEL = "PLARIDEL", "Plaridel Branch (Unit 14 G/F Rocka Commercial Complex, Tabang, Plaridel, Bulacan)"
         RETIRO_QC = "RETIRO_QC", "Retiro QC Branch (Amoranto, Quezon City)"
 
     class BookingSource(models.TextChoices):

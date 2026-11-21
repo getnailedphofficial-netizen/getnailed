@@ -304,14 +304,12 @@
                 <span>Account Security (2FA)</span>
               </a>
             </li>
-            {% if user.has_usable_password %}
             <li>
               <a class="dropdown-item py-2 rounded-2 d-flex align-items-center gap-2" href="{% url 'accounts:password_change' %}">
                 <i class="bi bi-key text-muted fs-6"></i>
-                <span>Change password</span>
+                <span>{% if user.has_usable_password %}Change password{% else %}Set backup password{% endif %}</span>
               </a>
             </li>
-            {% endif %}
             <li>
               <a class="dropdown-item py-2 rounded-2 d-flex align-items-center gap-2" href="{% url 'accounts:logout_all_devices' %}">
                 <i class="bi bi-shield-x text-muted fs-6"></i>

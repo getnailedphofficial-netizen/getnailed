@@ -400,7 +400,7 @@ def customer_appointments(request):
         appointments = (
             Appointment.objects.filter(customer=customer)
             .exclude(status__in=(Appointment.Status.UNVERIFIED, Appointment.Status.EXPIRED))
-            .select_related("assigned_staff")
+            .select_related("assigned_staff", "sale")
             .prefetch_related("appointment_services__service")
             .order_by("-appointment_date", "-start_time")
         )
@@ -417,6 +417,15 @@ def customer_appointments(request):
             pk__in=upcoming_appointments.values_list("pk", flat=True)
         ).order_by("-appointment_date", "-start_time")
 
+    customer_sales = (
+        Sale.objects.filter(customer=customer, status=Sale.Status.COMPLETED)
+        .select_related("payment")
+        .prefetch_related("items")
+        .order_by("-created_at")
+        if customer is not None
+        else Sale.objects.none()
+    )
+
     return render(
         request,
         "customers/appointments.html",
@@ -426,8 +435,21 @@ def customer_appointments(request):
             "past_appointments": past_appointments,
             "upcoming_count": upcoming_appointments.count(),
             "past_count": past_appointments.count(),
+            "customer_sales": customer_sales,
         },
     )
+
+
+@customer_required
+def customer_receipt(request, receipt_number):
+    customer = _get_or_create_customer(request.user)
+    sale = get_object_or_404(
+        Sale.objects.filter(customer=customer)
+        .select_related("customer", "appointment", "cashier", "payment")
+        .prefetch_related("items"),
+        receipt_number=receipt_number,
+    )
+    return render(request, "pos/receipt.html", {"sale": sale, "is_customer_receipt": True})
 
 
 @customer_required

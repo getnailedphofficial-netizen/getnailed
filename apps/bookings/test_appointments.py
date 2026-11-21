@@ -621,7 +621,6 @@ class AppointmentWorkflowTests(TestCase):
         )
         self.assertEqual(chat_res.status_code, 200)
         self.assertIn("Plaridel Branch", chat_res.json()["reply"])
-        self.assertIn("Retiro QC Branch", chat_res.json()["reply"])
 
     def test_guest_browser_can_browse_services_without_login_wall(self):
         response = self.client.get(
@@ -658,7 +657,7 @@ class AppointmentWorkflowTests(TestCase):
         r2 = self.client.post(
             reverse("bookings:select_schedule"),
             {
-                "branch": Appointment.Branch.RETIRO_QC,
+                "branch": Appointment.Branch.PLARIDEL,
                 "appointment_date": booking_date,
                 "start_time": "14:00",
                 "assigned_staff": self.staff.pk,
@@ -670,7 +669,7 @@ class AppointmentWorkflowTests(TestCase):
         r3 = self.client.post(
             reverse("bookings:contact_details"),
             {
-                "branch": Appointment.Branch.RETIRO_QC,
+                "branch": Appointment.Branch.PLARIDEL,
                 "first_name": "Maria",
                 "last_name": "Santos",
                 "email": "client@example.com",
@@ -684,7 +683,7 @@ class AppointmentWorkflowTests(TestCase):
         self.assertRedirects(r4, reverse("core:customer_appointments"))
         appt = Appointment.objects.get(customer_email_snapshot="client@example.com")
         self.assertEqual(appt.status, Appointment.Status.PENDING)
-        self.assertEqual(appt.branch, Appointment.Branch.RETIRO_QC)
+        self.assertEqual(appt.branch, Appointment.Branch.PLARIDEL)
         self.assertIsNotNone(appt.verified_at)
 
     def test_owner_and_staff_quick_status_transitions(self):

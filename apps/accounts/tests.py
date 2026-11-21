@@ -382,3 +382,25 @@ class AuthenticationSecurityTests(TestCase):
         self.assertEqual(target.role, User.Role.CUSTOMER)
         self.assertTrue(hasattr(target, "customer_profile"))
 
+        # 3. Verify passwordless Google user can set a backup password via password_change view
+        google_user = User.objects.create_user(
+            "googleclient@example.com",
+            password=None,
+            role=User.Role.CUSTOMER,
+            email_verified_at=timezone.now(),
+            is_active=True,
+        )
+        self.assertFalse(google_user.has_usable_password())
+        self.client.force_login(google_user)
+        get_pw = self.client.get(reverse("accounts:password_change"))
+        self.assertEqual(get_pw.status_code, 200)
+        self.assertContains(get_pw, "Set backup salon password")
+        post_pw = self.client.post(
+            reverse("accounts:password_change"),
+            {"new_password1": TEST_PASSWORD, "new_password2": TEST_PASSWORD},
+        )
+        self.assertEqual(post_pw.status_code, 302)
+        google_user.refresh_from_db()
+        self.assertTrue(google_user.has_usable_password())
+
+

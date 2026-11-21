@@ -195,12 +195,11 @@ def chatbot_api(request):
     lower = prompt.lower()
     reply_parts = []
 
-    if any(k in lower for k in ("branch", "location", "where", "address", "plaridel", "retiro", "qc", "bulacan")):
+    if any(k in lower for k in ("branch", "location", "where", "address", "plaridel", "bulacan")):
         reply_parts.append(
-            "📍 **Our Branches:**\n"
-            "1. **Plaridel Branch:** 137-B 2nd Floor, Rocka Commercial Complex, Tabang, Plaridel, Bulacan.\n"
-            "2. **Retiro QC Branch:** N.S. Amoranto Sr. St. (Retiro), Quezon City.\n"
-            "You can choose either branch directly in Step 1 of our online booking page!"
+            "📍 **Our Location:**\n"
+            "**Plaridel Branch:** Unit 14 G/F Rocka Commercial Complex, Tabang, Plaridel, Bulacan.\n"
+            "Open Daily: 9:00 AM – 8:00 PM • Contact: 0905 084 3892 / (044) 794-7692."
         )
 
     if any(k in lower for k in ("friday", "saturday", "sunday", "weekend", "300", "package", "walk-in", "walk in")):
@@ -259,7 +258,7 @@ def chatbot_api(request):
         reply_parts.append(
             "✨ **Welcome to Get Nailed Nail Bar & Spa!**\n"
             "I can help you with:\n"
-            "• **Locations:** Plaridel (Rocka Complex) & Retiro QC Branches\n"
+            "• **Location:** Unit 14 G/F Rocka Commercial Complex, Tabang, Plaridel, Bulacan\n"
             "• **Services & Pricing:** Categorized nail care, gel extensions & spa packages\n"
             "• **Weekend Policy:** Fri–Sun priority for packages > ₱300 (walk-ins welcome for basic services)\n"
             "• **Reminders & Grace Period:** No advance payment, 4–5hr & same-day reminders, 10–15 min grace period\n"

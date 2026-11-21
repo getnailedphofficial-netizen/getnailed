@@ -107,16 +107,20 @@ class SecurePasswordChangeView(PasswordChangeView):
     template_name = "accounts/password_change.html"
     form_class = SecurePasswordChangeForm
 
-    def dispatch(self, request, *args, **kwargs):
-        if request.user.is_authenticated and not request.user.has_usable_password():
-            messages.info(
-                request,
-                "Your account is secured via Google Sign-In and does not use a separate salon password.",
-            )
-            return redirect("core:dashboard_router")
-        return super().dispatch(request, *args, **kwargs)
+    def get_form_class(self):
+        if self.request.user.is_authenticated and not self.request.user.has_usable_password():
+            return ActivationSetPasswordForm
+        return SecurePasswordChangeForm
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["is_setting_initial_password"] = (
+            self.request.user.is_authenticated and not self.request.user.has_usable_password()
+        )
+        return ctx
 
     def form_valid(self, form):
+        was_initial = not self.request.user.has_usable_password()
         user = form.save()
         is_customer = getattr(user, "is_customer", False)
         record_security_event(
@@ -135,7 +139,13 @@ class SecurePasswordChangeView(PasswordChangeView):
         )
         invalidate_user_sessions(user)
         logout(self.request)
-        messages.success(self.request, "Your password was changed. Sign in again on each device.")
+        if was_initial:
+            messages.success(
+                self.request,
+                "Your backup salon password was set. You can now sign in with either Google or your email and password.",
+            )
+        else:
+            messages.success(self.request, "Your password was changed. Sign in again on each device.")
         if is_customer:
             return redirect("customers:customer_login")
         return redirect("accounts:login")
