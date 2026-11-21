@@ -238,7 +238,7 @@ def chatbot_api(request):
             reply_parts.append(
                 "💅 **Popular Salon Services:**\n"
                 + "\n".join(svc_lines)
-                + "\nBrowse all categorized services on our Services & Pricing page!"
+                + "\nBrowse all categorized services on our Services page!"
             )
 
     if any(k in lower for k in ("staff", "owner", "human", "agent", "talk", "message", "chat")) and request.user.is_authenticated and request.user.role == User.Role.CUSTOMER:
@@ -259,7 +259,7 @@ def chatbot_api(request):
             "✨ **Welcome to Get Nailed Nail Bar & Spa!**\n"
             "I can help you with:\n"
             "• **Location:** Unit 14 G/F Rocka Commercial Complex, Tabang, Plaridel, Bulacan\n"
-            "• **Services & Pricing:** Categorized nail care, gel extensions & spa packages\n"
+            "• **Services:** Categorized nail care, gel extensions & spa packages\n"
             "• **Weekend Policy:** Fri–Sun priority for packages > ₱300 (walk-ins welcome for basic services)\n"
             "• **Reminders & Grace Period:** No advance payment, 4–5hr & same-day reminders, 10–15 min grace period\n"
             "• **Direct Staff Chat:** Click **Messages** in the navigation bar to chat directly with our Owner or Staff!"
