@@ -71,8 +71,18 @@ class RequiredMFAMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        auth_methods = (
+            request.session.get("account_authentication_methods", [])
+            if hasattr(request, "session")
+            else []
+        )
+        is_social_session = any(
+            isinstance(m, dict) and m.get("method") == "socialaccount"
+            for m in auth_methods
+        )
         if (
             request.user.is_authenticated
+            and not is_social_session
             and is_mfa_required(request.user)
             and not has_totp(request.user)
             and not request.path.startswith(self.EXEMPT_PREFIXES)

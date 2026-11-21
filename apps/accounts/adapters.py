@@ -112,6 +112,9 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
             from apps.accounts.models import User
             try:
                 existing_user = User.objects.get(email__iexact=email.strip())
+                if not existing_user.email_verified_at:
+                    existing_user.email_verified_at = timezone.now()
+                    existing_user.save(update_fields=["email_verified_at"])
                 sociallogin.connect(request, existing_user)
             except User.DoesNotExist:
                 pass

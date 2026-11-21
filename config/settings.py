@@ -240,7 +240,6 @@ AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesStandaloneBackend',
     'apps.accounts.backends.EligibleUserBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 LOGIN_URL = 'accounts:login'
 LOGIN_REDIRECT_URL = 'core:dashboard_router'

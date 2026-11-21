@@ -134,6 +134,8 @@ class SecurePasswordChangeView(PasswordChangeView):
 
 class SecureActivateTOTPView(ActivateTOTPView):
     def dispatch(self, request, *args, **kwargs):
+        from django.core.exceptions import PermissionDenied
+
         if request.user.is_authenticated and getattr(request.user, "role", None) == User.Role.CUSTOMER:
             messages.info(
                 request,
@@ -143,7 +145,23 @@ class SecureActivateTOTPView(ActivateTOTPView):
         if request.user.is_authenticated and request.user.email_verified_at is None:
             messages.error(request, "Verify your email address before enabling MFA.")
             return redirect("mfa_index")
-        return super().dispatch(request, *args, **kwargs)
+        auth_methods = (
+            request.session.get("account_authentication_methods", [])
+            if hasattr(request, "session")
+            else []
+        )
+        is_social_session = any(
+            isinstance(m, dict) and m.get("method") == "socialaccount"
+            for m in auth_methods
+        )
+        if request.user.is_authenticated and (
+            is_social_session or not request.user.has_usable_password()
+        ):
+            return redirect("core:dashboard_router")
+        try:
+            return super().dispatch(request, *args, **kwargs)
+        except PermissionDenied:
+            return redirect("core:dashboard_router")
 
     def form_valid(self, form):
         totp_flows.activate_totp(self.request, form)

@@ -14,6 +14,8 @@ def has_totp(user):
 def is_mfa_required(user):
     if not user.is_authenticated:
         return False
+    if not user.has_usable_password():
+        return False
     if (user.role == User.Role.OWNER or user.is_superuser) and settings.MFA_ENFORCE_OWNER:
         return True
     if user.role not in {User.Role.CASHIER, User.Role.STAFF}:

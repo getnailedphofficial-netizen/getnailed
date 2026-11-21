@@ -9,7 +9,7 @@
   <script>
     (function() {
       try {
-        var isSmall = window.innerWidth < 992;
+        var isSmall = window.innerWidth < 768;
         var saved = localStorage.getItem('admin-sidebar-collapsed');
         if (saved === 'true' || (saved === null && isSmall)) {
           document.documentElement.classList.add('sidebar-collapsed');
