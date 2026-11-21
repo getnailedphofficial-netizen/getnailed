@@ -26,12 +26,53 @@
 </div>
 
 {% if pending_appointments_count > 0 %}
-<div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 py-3 px-4 rounded-4 shadow-sm border-warning">
-  <div class="d-flex align-items-center gap-3">
-    <i class="bi bi-exclamation-circle-fill text-warning fs-3"></i>
-    <span class="fs-5"><strong>Action Required:</strong> You have <strong>{{ pending_appointments_count }}</strong> pending appointment{{ pending_appointments_count|pluralize }} awaiting confirmation.</span>
+<div class="content-card shadow-sm mb-4 p-4 rounded-4" style="background: #fffbeb; border: 1.5px solid #fcd34d;">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3 pb-2 border-bottom" style="border-color: #fde68a !important;">
+    <div class="d-flex align-items-center gap-3">
+      <div class="d-flex align-items-center justify-content-center rounded-circle" style="width: 44px; height: 44px; background: #fef3c7; color: #b45309;">
+        <i class="bi bi-exclamation-circle-fill fs-4"></i>
+      </div>
+      <div>
+        <h3 class="h5 mb-0 fw-bold text-dark">Pending Approvals ({{ pending_appointments_count }})</h3>
+        <small class="text-muted">Approve client requests in 1 click — automatically issues their promo code and notifies them.</small>
+      </div>
+    </div>
+    <a href="{% url 'bookings:manage' %}?status=PENDING" class="btn btn-warning text-dark fw-bold rounded-pill px-3 py-1.5 shadow-sm">
+      View All Pending &rarr;
+    </a>
   </div>
-  <a href="{% url 'bookings:manage' %}?status=PENDING" class="btn btn-lg btn-warning text-dark fw-bold px-4 py-2 fs-5 shadow-sm">Review Appointments →</a>
+
+  <div class="d-flex flex-column gap-2">
+    {% for appt in pending_appointments %}
+      <div class="p-3 rounded-3 bg-white border d-flex flex-wrap justify-content-between align-items-center gap-3 shadow-sm" style="border-color: #fde68a !important;">
+        <div>
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="font-monospace fw-bold small" style="color: #8b3d52;">#{{ appt.reference }}</span>
+            <span class="fw-bold text-dark">{{ appt.customer_name }}</span>
+            <span class="badge bg-light text-dark border small">{{ appt.get_branch_display }}</span>
+          </div>
+          <div class="small text-muted">
+            <i class="bi bi-stars me-1"></i>{{ appt.service_name }}
+            &bull; <i class="bi bi-calendar3 me-1"></i>{{ appt.appointment_date|date:"M d, Y" }} at <strong>{{ appt.start_time|time:"g:i A" }}</strong>
+            {% if appt.assigned_staff %}&bull; <i class="bi bi-person-badge me-1"></i>{{ appt.assigned_staff.get_full_name|default:appt.assigned_staff.email }}{% endif %}
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <form method="post" action="{% url 'bookings:quick_status' reference=appt.reference %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="status" value="APPROVED">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="btn btn-sm btn-success fw-bold rounded-pill px-3 py-1.5">
+              <i class="bi bi-check-lg me-1"></i> Quick Approve
+            </button>
+          </form>
+          <a href="{% url 'bookings:detail' reference=appt.reference %}" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1.5">
+            Review
+          </a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
 </div>
 {% endif %}
 
@@ -108,6 +149,116 @@
     <small>Verified records &bull; +{{ new_customers_this_month }} new this month</small>
   </a>
 </div>
+
+<!-- Today's Live Salon Queue (Quick Operational Control) -->
+<section class="content-card shadow-sm p-4 rounded-4 mb-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 pb-2 border-bottom">
+    <div>
+      <div class="eyebrow mb-0">LIVE OPERATIONS &bull; TODAY</div>
+      <h3 class="h5 mb-0 fw-bold">Today's Salon Queue</h3>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{% url 'bookings:index' %}" class="btn btn-sm btn-outline-dark rounded-pill px-3">
+        <i class="bi bi-plus-circle me-1"></i> New Walk-In / Booking
+      </a>
+      <a href="{% url 'pos:index' %}" class="btn btn-sm btn-brand rounded-pill px-3">
+        <i class="bi bi-cart3 me-1"></i> Open POS
+      </a>
+    </div>
+  </div>
+
+  {% if today_queue %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr style="font-size: 0.82rem;">
+            <th>Time</th>
+            <th>Client</th>
+            <th>Services</th>
+            <th>Specialist</th>
+            <th>Status</th>
+            <th class="text-end">Quick Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for appt in today_queue %}
+            <tr>
+              <td>
+                <span class="badge bg-light text-dark border px-2.5 py-1.5 fw-semibold">{{ appt.start_time|time:"g:i A" }}</span>
+              </td>
+              <td>
+                <a href="{% url 'bookings:detail' reference=appt.reference %}" class="fw-bold text-dark text-decoration-none">{{ appt.customer_name }}</a>
+                <div class="small text-muted">{{ appt.get_branch_display }}</div>
+              </td>
+              <td>
+                <div class="text-truncate small fw-semibold" style="max-width: 210px;">{{ appt.service_name }}</div>
+                <small class="text-muted">₱{{ appt.total_price|floatformat:2 }}</small>
+              </td>
+              <td>
+                <span class="small">{{ appt.assigned_staff.get_full_name|default:appt.assigned_staff.email|default:"Unassigned" }}</span>
+              </td>
+              <td>
+                <span class="badge rounded-pill px-2.5 py-1
+                  {% if appt.status == 'APPROVED' %}bg-success-subtle text-success border border-success-subtle
+                  {% elif appt.status == 'ONGOING' %}bg-primary-subtle text-primary border border-primary-subtle
+                  {% elif appt.status == 'COMPLETED' %}bg-dark-subtle text-dark border
+                  {% elif appt.status == 'PENDING' %}bg-warning-subtle text-warning border border-warning-subtle
+                  {% else %}bg-secondary-subtle text-secondary{% endif %}">
+                  {{ appt.get_status_display }}
+                </span>
+              </td>
+              <td class="text-end text-nowrap">
+                {% if appt.status == 'PENDING' %}
+                  <form method="post" action="{% url 'bookings:quick_status' reference=appt.reference %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="status" value="APPROVED">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="btn btn-sm btn-success rounded-pill px-2.5 py-1 fw-semibold">
+                      <i class="bi bi-check-lg"></i> Approve
+                    </button>
+                  </form>
+                {% elif appt.status == 'APPROVED' or appt.status == 'RESCHEDULED' %}
+                  <form method="post" action="{% url 'bookings:quick_status' reference=appt.reference %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="status" value="ONGOING">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="btn btn-sm btn-primary rounded-pill px-2.5 py-1 fw-semibold">
+                      <i class="bi bi-play-fill"></i> Start
+                    </button>
+                  </form>
+                {% elif appt.status == 'ONGOING' %}
+                  <form method="post" action="{% url 'bookings:quick_status' reference=appt.reference %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="status" value="COMPLETED">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="btn btn-sm btn-success rounded-pill px-2.5 py-1 fw-semibold">
+                      <i class="bi bi-check2-all"></i> Complete
+                    </button>
+                  </form>
+                {% endif %}
+                {% if not appt.sale and appt.status != 'PENDING' %}
+                  <a href="{% url 'pos:index' %}?appointment={{ appt.pk }}" class="btn btn-sm btn-brand rounded-pill px-2.5 py-1 fw-semibold ms-1">
+                    <i class="bi bi-credit-card me-1"></i>POS
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="text-center py-4 px-3 rounded-4" style="background: #fdf8fa; border: 1px dashed #e5c6d1;">
+      <i class="bi bi-calendar2-heart fs-2 d-block mb-2" style="color: #8b3d52;"></i>
+      <div class="fw-bold text-dark mb-1">No appointments scheduled for today yet</div>
+      <div class="small text-muted mb-3">Ready for walk-ins or new bookings! You can create a walk-in appointment or open the POS register directly.</div>
+      <div class="d-flex justify-content-center flex-wrap gap-2">
+        <a href="{% url 'bookings:index' %}" class="btn btn-sm btn-brand rounded-pill px-3">Create Walk-In Booking</a>
+        <a href="{% url 'pos:index' %}?mode=walkin" class="btn btn-sm btn-outline-dark rounded-pill px-3">Open Walk-In POS</a>
+      </div>
+    </div>
+  {% endif %}
+</section>
 
 <!-- 3 KPI Graphs Row based on visual specs -->
 <div class="kpi-graphs-grid">

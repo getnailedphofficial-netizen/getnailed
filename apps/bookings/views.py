@@ -65,15 +65,51 @@ def _wizard_data(request):
     return request.session.get(WIZARD_SESSION_KEY, {})
 
 
+def _is_internal_booking_user(user):
+    return user.is_authenticated and (
+        getattr(user, "is_owner", False)
+        or getattr(user, "is_cashier", False)
+        or getattr(user, "can_manage_bookings", False)
+    )
+
+
+def _prefill_contact_from_user(user):
+    if not (user.is_authenticated and getattr(user, "is_customer", False)):
+        return {}
+    customer = getattr(user, "customer_profile", None)
+    return {
+        "first_name": (customer.first_name if customer and customer.first_name else user.first_name) or "",
+        "last_name": (customer.last_name if customer and customer.last_name else user.last_name) or "",
+        "email": (customer.email if customer and customer.email else user.email) or "",
+        "phone": (customer.phone if customer and customer.phone else getattr(user, "phone_number", "")) or "",
+    }
+
+
+def _active_service_categories():
+    from apps.services.models import ServiceCategory
+    from django.db.models import Prefetch
+
+    return (
+        ServiceCategory.objects.prefetch_related(
+            Prefetch("services", queryset=Service.objects.filter(is_active=True).order_by("name"))
+        )
+        .filter(services__is_active=True)
+        .distinct()
+        .order_by("name")
+    )
+
+
 @never_cache
 @require_http_methods(["GET", "POST"])
 def index(request):
-    if not request.user.is_authenticated and "Mozilla" in request.META.get("HTTP_USER_AGENT", ""):
-        return redirect(f"{reverse('accounts:login')}?next={request.get_full_path()}")
-
     # Accept the shipped single-request payload while browsers use the canonical wizard.
     if request.method == "POST" and (
-        "service_name" in request.POST or not any(key in request.POST for key in ("first_name", "last_name"))
+        "service_name" in request.POST
+        or (
+            "services" not in request.POST
+            and "wizard_step" not in request.POST
+            and "first_name" not in request.POST
+        )
     ):
         legacy_form = PublicBookingForm(request.POST)
         if legacy_form.is_valid():
@@ -82,59 +118,63 @@ def index(request):
             return redirect(f"{reverse('bookings:verify')}?reference={booking.reference}")
         return render(request, "bookings/public_booking.html", {"form": legacy_form})
 
-    initial = {}
-    if request.user.is_authenticated and getattr(request.user, "is_customer", False):
-        customer = getattr(request.user, "customer_profile", None)
-        initial = {
-            "first_name": customer.first_name if customer else request.user.first_name,
-            "last_name": customer.last_name if customer else request.user.last_name,
-            "email": customer.email if customer and customer.email else request.user.email,
-            "phone_number": customer.phone if customer and customer.phone else getattr(request.user, "phone_number", ""),
-        }
-        service_id = request.GET.get("service")
-        if service_id and service_id.isdigit() and initial.get("first_name") and initial.get("email"):
-            service_obj = Service.objects.filter(pk=service_id, is_active=True).first()
-            if service_obj:
-                request.session[WIZARD_SESSION_KEY] = {
-                    "contact": initial,
-                    "service_ids": [service_obj.pk],
-                }
-                return redirect("bookings:select_schedule")
+    is_internal = _is_internal_booking_user(request.user)
 
-    is_internal = request.user.is_authenticated and (
-        getattr(request.user, "is_owner", False)
-        or getattr(request.user, "is_cashier", False)
-        or getattr(request.user, "can_manage_bookings", False)
-    )
-    form = PublicContactForm(
+    # Preserve backward compatibility if a legacy caller POSTs contact fields directly to index.
+    if request.method == "POST" and "first_name" in request.POST and "services" not in request.POST:
+        contact_form = PublicContactForm(request.POST, is_internal=is_internal)
+        if contact_form.is_valid():
+            contact_data = {
+                "branch": contact_form.cleaned_data.get("branch") or Appointment.Branch.PLARIDEL,
+                "first_name": contact_form.cleaned_data.get("first_name", ""),
+                "last_name": contact_form.cleaned_data.get("last_name", ""),
+                "email": contact_form.cleaned_data.get("email", ""),
+                "phone": contact_form.cleaned_data.get("phone", ""),
+                "notes": contact_form.cleaned_data.get("notes", ""),
+                "customer_id": (
+                    contact_form.cleaned_data["customer"].pk
+                    if contact_form.cleaned_data.get("customer")
+                    else None
+                ),
+            }
+            request.session[WIZARD_SESSION_KEY] = {"contact": contact_data}
+            return redirect("bookings:select_services")
+
+    data = dict(_wizard_data(request))
+
+    # Direct shortcut when clicking "Book" on a specific service card (?service=<id>)
+    service_id = request.GET.get("service")
+    if request.method == "GET" and service_id and service_id.isdigit():
+        service_obj = Service.objects.filter(pk=int(service_id), is_active=True).first()
+        if service_obj:
+            data["service_ids"] = [service_obj.pk]
+            request.session[WIZARD_SESSION_KEY] = data
+            return redirect("bookings:select_schedule")
+
+    initial_services = data.get("service_ids", [])
+    form = PublicServiceForm(
         request.POST if request.method == "POST" else None,
-        initial=initial,
-        is_internal=is_internal,
+        initial={"services": initial_services} if initial_services and request.method == "GET" else None,
     )
     if request.method == "POST" and form.is_valid():
-        contact_data = {
-            "branch": form.cleaned_data.get("branch") or Appointment.Branch.PLARIDEL,
-            "first_name": form.cleaned_data.get("first_name", ""),
-            "last_name": form.cleaned_data.get("last_name", ""),
-            "email": form.cleaned_data.get("email", ""),
-            "phone": form.cleaned_data.get("phone", ""),
-            "notes": form.cleaned_data.get("notes", ""),
-            "customer_id": (
-                form.cleaned_data["customer"].pk
-                if form.cleaned_data.get("customer")
-                else None
-            ),
-        }
-        request.session[WIZARD_SESSION_KEY] = {"contact": contact_data}
-        return redirect("bookings:select_services")
+        data["service_ids"] = list(form.cleaned_data["services"].values_list("pk", flat=True))
+        request.session[WIZARD_SESSION_KEY] = data
+        return redirect("bookings:select_schedule")
+
+    selected_ids = set(initial_services)
+    if request.method == "POST" and "services" in request.POST:
+        selected_ids = set(int(pk) for pk in request.POST.getlist("services") if pk.isdigit())
+
     return render(
         request,
         "bookings/public_booking.html",
         {
             "form": form,
             "step": 1,
-            "step_title": "Customer details" if is_internal else "Your details",
-            "button_label": "Choose services",
+            "step_title": "Choose Your Services",
+            "button_label": "Next: Pick Date & Time",
+            "categories": _active_service_categories(),
+            "selected_ids": selected_ids,
             "is_internal": is_internal,
         },
     )
@@ -143,8 +183,8 @@ def index(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def select_services(request):
-    data = _wizard_data(request)
-    if "contact" not in data:
+    data = dict(_wizard_data(request))
+    if request.method == "GET" and "contact" not in data:
         return redirect("bookings:index")
     service_id = request.GET.get("service")
     initial_services = [int(service_id)] if service_id and service_id.isdigit() else data.get("service_ids", [])
@@ -157,12 +197,6 @@ def select_services(request):
         request.session[WIZARD_SESSION_KEY] = data
         return redirect("bookings:select_schedule")
 
-    from apps.services.models import ServiceCategory
-    from django.db.models import Prefetch
-    categories = ServiceCategory.objects.prefetch_related(
-        Prefetch("services", queryset=Service.objects.filter(is_active=True).order_by("name"))
-    ).filter(services__is_active=True).distinct().order_by("name")
-
     selected_ids = set(initial_services)
     if request.method == "POST" and "services" in request.POST:
         selected_ids = set(int(pk) for pk in request.POST.getlist("services") if pk.isdigit())
@@ -172,11 +206,12 @@ def select_services(request):
         "bookings/public_booking.html",
         {
             "form": form,
-            "step": 2,
-            "step_title": "Services",
-            "button_label": "Choose a time",
-            "categories": categories,
+            "step": 1,
+            "step_title": "Choose Your Services",
+            "button_label": "Next: Pick Date & Time",
+            "categories": _active_service_categories(),
             "selected_ids": selected_ids,
+            "is_internal": _is_internal_booking_user(request.user),
         },
     )
 
@@ -184,28 +219,110 @@ def select_services(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def select_schedule(request):
-    data = _wizard_data(request)
-    if "contact" not in data or not data.get("service_ids"):
+    data = dict(_wizard_data(request))
+    if not data.get("service_ids"):
         return redirect("bookings:index")
-    is_internal = request.user.is_authenticated and (
-        getattr(request.user, "is_owner", False)
-        or getattr(request.user, "is_cashier", False)
-        or getattr(request.user, "can_manage_bookings", False)
-    )
+    is_internal = _is_internal_booking_user(request.user)
     services = list(Service.objects.filter(pk__in=data.get("service_ids", []), is_active=True))
+    if not services:
+        return redirect("bookings:index")
+
+    saved_schedule = data.get("schedule", {})
+    initial_schedule = {
+        "branch": saved_schedule.get("branch") or data.get("contact", {}).get("branch") or Appointment.Branch.PLARIDEL,
+        "appointment_date": saved_schedule.get("appointment_date", ""),
+        "start_time": saved_schedule.get("start_time", ""),
+        "assigned_staff": saved_schedule.get("assigned_staff_id") or "",
+    }
     form = PublicScheduleForm(
         request.POST if request.method == "POST" else None,
+        initial=initial_schedule if request.method == "GET" else None,
         services=services,
         is_internal=is_internal,
     )
     if request.method == "POST" and form.is_valid():
+        chosen_branch = form.cleaned_data.get("branch") or data.get("contact", {}).get("branch") or Appointment.Branch.PLARIDEL
         data["schedule"] = {
+            "branch": chosen_branch,
             "appointment_date": form.cleaned_data["appointment_date"].isoformat(),
             "start_time": form.cleaned_data["start_time"].isoformat(),
             "assigned_staff_id": getattr(form.cleaned_data["assigned_staff"], "pk", None),
         }
+        if "contact" in data:
+            data["contact"]["branch"] = chosen_branch
+            request.session[WIZARD_SESSION_KEY] = data
+            return redirect("bookings:review")
+        request.session[WIZARD_SESSION_KEY] = data
+        return redirect("bookings:contact_details")
+
+    total_duration = sum(s.duration_minutes for s in services)
+    total_price = sum(s.price for s in services)
+    return render(
+        request,
+        "bookings/public_booking.html",
+        {
+            "form": form,
+            "step": 2,
+            "step_title": "Branch, Date & Time",
+            "button_label": "Next: Your Details",
+            "service_ids": data.get("service_ids", []),
+            "services": services,
+            "total_duration": total_duration,
+            "total_price": total_price,
+            "is_internal": is_internal,
+        },
+    )
+
+
+@never_cache
+@require_http_methods(["GET", "POST"])
+def contact_details(request):
+    data = dict(_wizard_data(request))
+    if not data.get("service_ids") or "schedule" not in data:
+        return redirect("bookings:index")
+
+    is_internal = _is_internal_booking_user(request.user)
+    saved_contact = data.get("contact", {})
+    user_prefill = _prefill_contact_from_user(request.user)
+    branch_default = (
+        data["schedule"].get("branch")
+        or saved_contact.get("branch")
+        or Appointment.Branch.PLARIDEL
+    )
+    initial = {
+        "branch": branch_default,
+        "first_name": saved_contact.get("first_name") or user_prefill.get("first_name", ""),
+        "last_name": saved_contact.get("last_name") or user_prefill.get("last_name", ""),
+        "email": saved_contact.get("email") or user_prefill.get("email", ""),
+        "phone": saved_contact.get("phone") or user_prefill.get("phone", ""),
+        "notes": saved_contact.get("notes", ""),
+    }
+
+    form = PublicContactForm(
+        request.POST if request.method == "POST" else None,
+        initial=initial if request.method == "GET" else None,
+        is_internal=is_internal,
+    )
+    if request.method == "POST" and form.is_valid():
+        contact_data = {
+            "branch": form.cleaned_data.get("branch") or branch_default,
+            "first_name": form.cleaned_data.get("first_name", ""),
+            "last_name": form.cleaned_data.get("last_name", ""),
+            "email": form.cleaned_data.get("email", ""),
+            "phone": form.cleaned_data.get("phone", ""),
+            "notes": form.cleaned_data.get("notes", ""),
+            "customer_id": (
+                form.cleaned_data["customer"].pk
+                if form.cleaned_data.get("customer")
+                else None
+            ),
+        }
+        data["contact"] = contact_data
+        data["schedule"]["branch"] = contact_data["branch"]
         request.session[WIZARD_SESSION_KEY] = data
         return redirect("bookings:review")
+
+    services = list(Service.objects.filter(pk__in=data.get("service_ids", []), is_active=True))
     total_duration = sum(s.duration_minutes for s in services)
     total_price = sum(s.price for s in services)
     return render(
@@ -214,13 +331,14 @@ def select_schedule(request):
         {
             "form": form,
             "step": 3,
-            "step_title": "Schedule",
-            "button_label": "Review request",
-            "service_ids": data.get("service_ids", []),
+            "step_title": "Customer Details" if is_internal else "Your Details",
+            "button_label": "Review & Confirm",
+            "is_internal": is_internal,
             "services": services,
             "total_duration": total_duration,
             "total_price": total_price,
-            "is_internal": is_internal,
+            "schedule_preview": data.get("schedule", {}),
+            "branch_display": dict(Appointment.Branch.choices).get(branch_default, branch_default),
         },
     )
 
@@ -254,24 +372,21 @@ def api_available_slots(request):
     return JsonResponse({"slots": slots})
 
 
-
 @never_cache
 @require_http_methods(["GET", "POST"])
 def review(request):
     data = _wizard_data(request)
     if "contact" not in data or not data.get("service_ids") or "schedule" not in data:
         return redirect("bookings:index")
-    is_internal_admin = (
+    is_internal_admin = _is_internal_booking_user(request.user)
+    is_verified_customer = (
         request.user.is_authenticated
-        and (
-            getattr(request.user, "is_owner", False)
-            or getattr(request.user, "is_cashier", False)
-            or getattr(request.user, "can_manage_bookings", False)
-        )
+        and getattr(request.user, "is_customer", False)
     )
     services = list(Service.objects.filter(pk__in=data["service_ids"], is_active=True))
     schedule_form = PublicScheduleForm(
         data={
+            "branch": data["schedule"].get("branch") or data["contact"].get("branch") or Appointment.Branch.PLARIDEL,
             "appointment_date": data["schedule"]["appointment_date"],
             "start_time": data["schedule"]["start_time"],
             "assigned_staff": data["schedule"].get("assigned_staff_id") or "",
@@ -293,7 +408,7 @@ def review(request):
     assigned_staff_obj = schedule_form.cleaned_data.get("assigned_staff")
     total_duration = sum(s.duration_minutes for s in services)
     total_price = sum(s.price for s in services)
-    branch_code = data["contact"].get("branch") or Appointment.Branch.PLARIDEL
+    branch_code = data["schedule"].get("branch") or data["contact"].get("branch") or Appointment.Branch.PLARIDEL
     branch_display = dict(Appointment.Branch.choices).get(branch_code, branch_code)
 
     if request.method == "POST":
@@ -327,7 +442,12 @@ def review(request):
                     initial_status=Appointment.Status.APPROVED,
                 )
             else:
-                appointment = create_public_appointment(appointment_data, services, request)
+                appointment = create_public_appointment(
+                    appointment_data,
+                    services,
+                    request,
+                    auto_verify=is_verified_customer,
+                )
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
         else:
@@ -343,6 +463,12 @@ def review(request):
                     f"Appointment #{appointment.reference} confirmed and assigned to {staff_name} successfully!",
                 )
                 return redirect("bookings:detail", reference=appointment.reference)
+            elif is_verified_customer:
+                messages.success(
+                    request,
+                    f"Booking request #{appointment.reference} submitted! Our salon team has been notified and will confirm your slot shortly.",
+                )
+                return redirect("core:customer_appointments")
             else:
                 messages.success(
                     request,
@@ -360,10 +486,16 @@ def review(request):
             "assigned_staff_obj": assigned_staff_obj,
             "total_duration": total_duration,
             "total_price": total_price,
+            "is_internal": is_internal_admin,
             "is_internal_admin": is_internal_admin,
+            "is_verified_customer": is_verified_customer,
             "step": 4,
             "step_title": "Review Appointment & Technician",
-            "button_label": "Confirm & Book Appointment" if is_internal_admin else "Submit booking request",
+            "button_label": (
+                "Confirm & Book Appointment"
+                if is_internal_admin
+                else ("Confirm Booking Request" if is_verified_customer else "Submit Booking Request")
+            ),
         },
     )
 
@@ -715,3 +847,44 @@ def process_alerts_view(request):
         f"{summary['grace_period_released']} late no-show slots auto-released.",
     )
     return redirect(request.META.get("HTTP_REFERER") or "bookings:manage")
+
+
+@authenticated_internal_user_required
+@require_http_methods(["POST"])
+def quick_status(request, reference):
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    appointment = get_object_or_404(
+        Appointment.objects.visible_to(request.user),
+        booking_reference=reference,
+    )
+    new_status = (request.POST.get("status") or "").strip().upper()
+    note = (request.POST.get("note") or "").strip()
+    next_url = (request.POST.get("next") or "").strip()
+
+    try:
+        updated = transition_appointment(
+            appointment,
+            new_status,
+            request.user,
+            note=note,
+        )
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+    except Exception as exc:
+        messages.error(request, str(exc))
+    else:
+        if updated.status == Appointment.Status.APPROVED and updated.promo_code_issued:
+            messages.success(
+                request,
+                f"Appointment #{updated.reference} approved! Promo code {updated.promo_code_issued} issued to {updated.customer_name}.",
+            )
+        else:
+            messages.success(
+                request,
+                f"Appointment #{updated.reference} updated to {updated.get_status_display()}.",
+            )
+
+    if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        return redirect(next_url)
+    return redirect("bookings:detail", reference=reference)

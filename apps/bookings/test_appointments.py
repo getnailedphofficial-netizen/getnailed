@@ -622,3 +622,101 @@ class AppointmentWorkflowTests(TestCase):
         self.assertEqual(chat_res.status_code, 200)
         self.assertIn("Plaridel Branch", chat_res.json()["reply"])
         self.assertIn("Retiro QC Branch", chat_res.json()["reply"])
+
+    def test_guest_browser_can_browse_services_without_login_wall(self):
+        response = self.client.get(
+            reverse("bookings:index"),
+            HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Choose Your Services")
+        self.assertContains(response, self.service.name)
+
+    def test_service_first_wizard_and_verified_customer_skips_email_otp(self):
+        customer_user = self.create_user("client@example.com", User.Role.CUSTOMER)
+        customer_user.first_name = "Maria"
+        customer_user.last_name = "Santos"
+        customer_user.save(update_fields=("first_name", "last_name"))
+        Customer.objects.create(
+            user=customer_user,
+            first_name="Maria",
+            last_name="Santos",
+            email="client@example.com",
+            phone="09171234567",
+        )
+        self.client.force_login(customer_user)
+
+        # Step 1: Choose Services
+        r1 = self.client.post(
+            reverse("bookings:index"),
+            {"wizard_step": "services", "services": [self.service.pk]},
+        )
+        self.assertRedirects(r1, reverse("bookings:select_schedule"))
+
+        # Step 2: Choose Branch & Schedule
+        booking_date = (timezone.localdate() + timedelta(days=3)).isoformat()
+        r2 = self.client.post(
+            reverse("bookings:select_schedule"),
+            {
+                "branch": Appointment.Branch.RETIRO_QC,
+                "appointment_date": booking_date,
+                "start_time": "14:00",
+                "assigned_staff": self.staff.pk,
+            },
+        )
+        self.assertRedirects(r2, reverse("bookings:contact_details"))
+
+        # Step 3: Contact Details (auto-filled)
+        r3 = self.client.post(
+            reverse("bookings:contact_details"),
+            {
+                "branch": Appointment.Branch.RETIRO_QC,
+                "first_name": "Maria",
+                "last_name": "Santos",
+                "email": "client@example.com",
+                "phone": "09171234567",
+            },
+        )
+        self.assertRedirects(r3, reverse("bookings:review"))
+
+        # Step 4: Confirm — verified customer goes straight to PENDING (no OTP block)
+        r4 = self.client.post(reverse("bookings:review"))
+        self.assertRedirects(r4, reverse("core:customer_appointments"))
+        appt = Appointment.objects.get(customer_email_snapshot="client@example.com")
+        self.assertEqual(appt.status, Appointment.Status.PENDING)
+        self.assertEqual(appt.branch, Appointment.Branch.RETIRO_QC)
+        self.assertIsNotNone(appt.verified_at)
+
+    def test_owner_and_staff_quick_status_transitions(self):
+        appt = self.create_appointment()
+        appt.status = Appointment.Status.PENDING
+        appt.verified_at = timezone.now()
+        appt.save(update_fields=("status", "verified_at"))
+
+        # Owner 1-click Approve from dashboard
+        self.client.force_login(self.owner)
+        res_approve = self.client.post(
+            reverse("bookings:quick_status", kwargs={"reference": appt.reference}),
+            {"status": Appointment.Status.APPROVED, "next": reverse("core:owner_dashboard")},
+        )
+        self.assertRedirects(res_approve, reverse("core:owner_dashboard"))
+        appt.refresh_from_db()
+        self.assertEqual(appt.status, Appointment.Status.APPROVED)
+
+        # Staff 1-click Start Service and Complete from Staff Dashboard
+        self.client.force_login(self.staff)
+        res_start = self.client.post(
+            reverse("bookings:quick_status", kwargs={"reference": appt.reference}),
+            {"status": Appointment.Status.ONGOING, "next": reverse("core:staff_dashboard")},
+        )
+        self.assertRedirects(res_start, reverse("core:staff_dashboard"))
+        appt.refresh_from_db()
+        self.assertEqual(appt.status, Appointment.Status.ONGOING)
+
+        res_done = self.client.post(
+            reverse("bookings:quick_status", kwargs={"reference": appt.reference}),
+            {"status": Appointment.Status.COMPLETED, "next": reverse("core:staff_dashboard")},
+        )
+        self.assertRedirects(res_done, reverse("core:staff_dashboard"))
+        appt.refresh_from_db()
+        self.assertEqual(appt.status, Appointment.Status.COMPLETED)

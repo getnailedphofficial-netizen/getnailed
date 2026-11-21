@@ -214,6 +214,13 @@ class PublicServiceForm(forms.Form):
 
 
 class PublicScheduleForm(forms.Form):
+    branch = forms.ChoiceField(
+        label="Salon Branch",
+        choices=Appointment.Branch.choices,
+        initial=Appointment.Branch.PLARIDEL,
+        required=False,
+        widget=forms.Select(attrs={**FORM_CONTROL, "class": "form-select"}),
+    )
     appointment_date = forms.DateField(
         label="Appointment Date",
         widget=forms.DateInput(attrs={**FORM_CONTROL, "type": "date"}),
@@ -229,6 +236,9 @@ class PublicScheduleForm(forms.Form):
         label="Start Time",
         widget=forms.TimeInput(attrs={**FORM_CONTROL, "type": "time"}),
     )
+
+    def clean_branch(self):
+        return self.cleaned_data.get("branch") or Appointment.Branch.PLARIDEL
 
     def __init__(self, *args, services=None, is_internal=False, **kwargs):
         super().__init__(*args, **kwargs)

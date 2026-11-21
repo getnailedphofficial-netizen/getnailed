@@ -15,6 +15,13 @@
             <strong>Admin Booking:</strong> This appointment will be directly created and approved with the assigned technician without requiring email OTP verification.
           </div>
         </div>
+      {% elif is_verified_customer %}
+        <div class="alert alert-success d-flex align-items-center mb-4 py-2 px-3 rounded-3" style="font-size: 0.9rem; background: #f0fdf4; border-color: #86efac;">
+          <i class="bi bi-patch-check-fill fs-5 me-2 text-success"></i>
+          <div>
+            <strong>Instant Submission:</strong> Your account is verified — clicking confirm submits your booking straight to the salon with no email code required!
+          </div>
+        </div>
       {% endif %}
 
       <!-- Technician Assignment Highlight Card -->
@@ -132,8 +139,8 @@
       <form method="post" novalidate id="confirm-booking-form">
         {% csrf_token %}
         <div class="d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-between gap-3 pt-2">
-          <a href="{% url 'bookings:select_schedule' %}" class="btn btn-outline-secondary py-2.5">
-            <i class="bi bi-arrow-left me-1"></i> Back to Schedule
+          <a href="{% url 'bookings:contact_details' %}" class="btn btn-outline-secondary py-2.5">
+            <i class="bi bi-arrow-left me-1"></i> Back to Details
           </a>
           <button class="btn btn-brand btn-lg px-4 py-2.5 fw-bold" type="submit">
             <i class="bi bi-check2-circle me-1"></i> {{ button_label|default:"Submit booking request" }}

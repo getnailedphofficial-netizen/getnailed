@@ -390,6 +390,27 @@ def owner_dashboard_data(period="today"):
         "today_appointments_count": today_appointments_count,
         "today_completed_appointments": today_completed_appointments,
         "pending_appointments_count": pending_appointments_count,
+        "pending_appointments": list(
+            Appointment.objects.filter(status=Appointment.Status.PENDING)
+            .select_related("customer", "assigned_staff")
+            .prefetch_related("appointment_services")
+            .order_by("appointment_date", "start_time")[:6]
+        ),
+        "today_queue": list(
+            Appointment.objects.filter(
+                appointment_date=today,
+                status__in=(
+                    Appointment.Status.PENDING,
+                    Appointment.Status.APPROVED,
+                    Appointment.Status.RESCHEDULED,
+                    Appointment.Status.ONGOING,
+                    Appointment.Status.COMPLETED,
+                ),
+            )
+            .select_related("customer", "assigned_staff")
+            .prefetch_related("appointment_services", "sale")
+            .order_by("start_time")[:10]
+        ),
         "ongoing_services": AppointmentService.objects.filter(
             status=AppointmentService.Status.ONGOING
         ).count(),

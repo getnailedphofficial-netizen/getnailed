@@ -161,9 +161,37 @@
                   {{ booking.get_status_display }}
                 </span>
               </td>
-              <td class="text-end">
-                <div class="d-inline-flex gap-1">
+              <td class="text-end text-nowrap">
+                <div class="d-inline-flex align-items-center gap-1 flex-wrap justify-content-end">
                   {% if not booking.is_legacy_booking %}
+                    {% if booking.status == 'PENDING' and user.is_owner or booking.status == 'PENDING' and user.is_cashier or booking.status == 'PENDING' and user.can_manage_bookings %}
+                      <form method="post" action="{% url 'bookings:quick_status' reference=booking.reference %}" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="status" value="APPROVED">
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="btn btn-sm btn-success fw-semibold" title="Approve booking in 1 click">
+                          <i class="bi bi-check-lg"></i> Approve
+                        </button>
+                      </form>
+                    {% elif booking.status == 'APPROVED' or booking.status == 'RESCHEDULED' %}
+                      <form method="post" action="{% url 'bookings:quick_status' reference=booking.reference %}" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="status" value="ONGOING">
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="btn btn-sm btn-primary fw-semibold" title="Start service">
+                          <i class="bi bi-play-fill"></i> Start
+                        </button>
+                      </form>
+                    {% elif booking.status == 'ONGOING' %}
+                      <form method="post" action="{% url 'bookings:quick_status' reference=booking.reference %}" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="status" value="COMPLETED">
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="btn btn-sm btn-success fw-semibold" title="Mark service completed">
+                          <i class="bi bi-check2-all"></i> Done
+                        </button>
+                      </form>
+                    {% endif %}
                     <a class="btn btn-sm btn-outline-brand" href="{% url 'bookings:detail' reference=booking.reference %}">
                       View
                     </a>

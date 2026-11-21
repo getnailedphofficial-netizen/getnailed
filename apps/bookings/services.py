@@ -343,7 +343,7 @@ def _create_notifications(appointment, event_type, title, message, include_manag
     )
 
 
-def create_public_appointment(cleaned_data, services, request):
+def create_public_appointment(cleaned_data, services, request, auto_verify=False):
     now = timezone.now()
     service_ids = list(dict.fromkeys(item.pk for item in services))
     with transaction.atomic():
@@ -394,7 +394,18 @@ def create_public_appointment(cleaned_data, services, request):
         if user is not None and user.is_authenticated and user.is_customer:
             customer = Customer.objects.select_for_update().filter(user=request.user).first()
             if customer is None:
-                raise ValidationError("Your customer profile is not connected to this account.")
+                customer = Customer.objects.select_for_update().filter(email__iexact=user.email).first()
+                if customer is not None and customer.user_id is None:
+                    customer.user = user
+                    customer.save(update_fields=("user", "updated_at"))
+                else:
+                    customer = Customer.objects.create(
+                        user=user,
+                        first_name=cleaned_data.get("first_name") or user.first_name or user.email.split("@")[0],
+                        last_name=cleaned_data.get("last_name") or user.last_name or "Client",
+                        email=user.email,
+                        phone=cleaned_data.get("phone", "") or getattr(user, "phone_number", ""),
+                    )
             if customer.email.lower() != email:
                 raise ValidationError("Use the email address connected to your customer account.")
         else:
@@ -414,6 +425,7 @@ def create_public_appointment(cleaned_data, services, request):
                 changed.append(field)
         if changed:
             customer.save(update_fields=(*changed, "updated_at"))
+
         appointment = Appointment.objects.create(
             branch=cleaned_data.get("branch") or Appointment.Branch.PLARIDEL,
             customer=customer,
@@ -425,6 +437,8 @@ def create_public_appointment(cleaned_data, services, request):
             end_time=end_time,
             assigned_staff=staff,
             notes=cleaned_data.get("notes", ""),
+            status=Appointment.Status.PENDING if auto_verify else Appointment.Status.UNVERIFIED,
+            verified_at=now if auto_verify else None,
             expires_at=now + settings.BOOKING_UNVERIFIED_TIMEOUT,
         )
         AppointmentService.objects.bulk_create(
@@ -441,21 +455,51 @@ def create_public_appointment(cleaned_data, services, request):
                 for position, service in enumerate(services)
             ]
         )
-        code = _new_verification_code()
-        appointment.set_verification_code(
-            code,
-            min(appointment.expires_at, now + settings.BOOKING_VERIFICATION_CODE_TIMEOUT),
-        )
-        appointment.save(
-            update_fields=(
-                "verification_code_digest",
-                "verification_code_expires_at",
-                "verification_failed_attempts",
-                "verification_sent_at",
-                "updated_at",
+
+        if auto_verify:
+            token = appointment.issue_public_access_token(now + settings.BOOKING_ACCESS_TOKEN_TIMEOUT)
+            appointment.save(
+                update_fields=(
+                    "public_access_token_digest",
+                    "public_access_expires_at",
+                    "updated_at",
+                )
             )
-        )
-        _send_verification_email(appointment, code, request)
+            AppointmentStatusHistory.objects.create(
+                appointment=appointment,
+                from_status="",
+                to_status=Appointment.Status.PENDING,
+                actor=user if (user is not None and user.is_authenticated) else None,
+                note="Submitted by verified customer account.",
+            )
+            _create_notifications(
+                appointment,
+                Notification.EventType.NEW,
+                "New appointment request",
+                f"{appointment.customer_name} requested {appointment.service_name}.",
+                include_managers=True,
+            )
+            try:
+                _send_confirmed_email(appointment, token, request)
+            except Exception:
+                pass
+            appointment._issued_public_token = token
+        else:
+            code = _new_verification_code()
+            appointment.set_verification_code(
+                code,
+                min(appointment.expires_at, now + settings.BOOKING_VERIFICATION_CODE_TIMEOUT),
+            )
+            appointment.save(
+                update_fields=(
+                    "verification_code_digest",
+                    "verification_code_expires_at",
+                    "verification_failed_attempts",
+                    "verification_sent_at",
+                    "updated_at",
+                )
+            )
+            _send_verification_email(appointment, code, request)
     return appointment
 
 

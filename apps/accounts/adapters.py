@@ -142,17 +142,39 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         if getattr(user, "role", None) == user.Role.CUSTOMER:
             from apps.customers.models import Customer
             data = sociallogin.account.extra_data or {}
-            full_name = (
-                user.get_full_name()
-                or data.get("name")
-                or user.email.split("@")[0]
-            )
-            Customer.objects.get_or_create(
-                user=user,
-                defaults={
-                    "name": full_name,
-                    "email": user.email,
-                    "phone": getattr(user, "phone_number", "") or "",
-                },
-            )
+            first_name = (user.first_name or data.get("given_name") or "").strip()
+            last_name = (user.last_name or data.get("family_name") or "").strip()
+            if not first_name:
+                full_name = (data.get("name") or user.email.split("@")[0]).strip()
+                parts = full_name.split(None, 1)
+                first_name = parts[0]
+                last_name = last_name or (parts[1] if len(parts) > 1 else "Client")
+            if not last_name:
+                last_name = "Client"
+
+            # Sync user first/last name if missing
+            updated_fields = []
+            if not user.first_name and first_name:
+                user.first_name = first_name
+                updated_fields.append("first_name")
+            if not user.last_name and last_name:
+                user.last_name = last_name
+                updated_fields.append("last_name")
+            if updated_fields:
+                user.save(update_fields=updated_fields)
+
+            customer = Customer.objects.filter(user=user).first()
+            if customer is None and user.email:
+                customer = Customer.objects.filter(email__iexact=user.email).first()
+                if customer is not None and customer.user_id is None:
+                    customer.user = user
+                    customer.save(update_fields=("user", "updated_at"))
+            if customer is None:
+                Customer.objects.create(
+                    user=user,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=user.email,
+                    phone=getattr(user, "phone_number", "") or "",
+                )
         return user

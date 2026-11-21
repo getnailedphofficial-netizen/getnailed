@@ -3,22 +3,38 @@
     <div class="content-card mx-auto shadow-sm" style="max-width: 780px;">
 
       <!-- Responsive Wizard Stepper Header -->
-      <div class="wizard-stepper-header mb-3 pb-3 border-bottom">
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-          <div class="eyebrow mb-0">PUBLIC BOOKING{% if step %} · STEP {{ step }} OF 4{% endif %}</div>
-          <span class="badge bg-light text-muted border px-2.5 py-1 small">
-            {% if step == 1 %}1/4: Contact &amp; Consult
-            {% elif step == 2 %}2/4: Services
-            {% elif step == 3 %}3/4: Schedule
-            {% elif step == 4 %}4/4: Review
+      <div class="wizard-stepper-header mb-4 pb-3 border-bottom">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <div class="eyebrow mb-0">ONLINE BOOKING{% if step %} · STEP {{ step }} OF 4{% endif %}</div>
+          <span class="badge rounded-pill px-3 py-1.5 small fw-semibold" style="background: #fdf2f5; color: #8b3d52; border: 1px solid #ebd6de;">
+            {% if step == 1 %}1/4: Choose Services
+            {% elif step == 2 %}2/4: Branch &amp; Schedule
+            {% elif step == 3 %}3/4: Your Details
+            {% elif step == 4 %}4/4: Review &amp; Confirm
             {% else %}Online Booking{% endif %}
+          </span>
+        </div>
+
+        <!-- Visual 4-Step Indicator -->
+        <div class="d-flex align-items-center justify-content-between gap-2 mb-2 small text-center">
+          <a href="{% url 'bookings:index' %}" class="flex-fill text-decoration-none py-1.5 px-2 rounded-3 {% if step == 1 %}fw-bold text-white shadow-sm{% elif step > 1 %}fw-semibold{% else %}text-muted{% endif %}" style="{% if step == 1 %}background: #8b3d52;{% elif step > 1 %}background: #fdf2f5; color: #8b3d52;{% else %}background: #f8f5f6;{% endif %}">
+            1. Services
+          </a>
+          <a href="{% if step >= 2 %}{% url 'bookings:select_schedule' %}{% else %}#{% endif %}" class="flex-fill text-decoration-none py-1.5 px-2 rounded-3 {% if step == 2 %}fw-bold text-white shadow-sm{% elif step > 2 %}fw-semibold{% else %}text-muted{% endif %}" style="{% if step == 2 %}background: #8b3d52;{% elif step > 2 %}background: #fdf2f5; color: #8b3d52;{% else %}background: #f8f5f6; pointer-events: none;{% endif %}">
+            2. Schedule
+          </a>
+          <a href="{% if step >= 3 %}{% url 'bookings:contact_details' %}{% else %}#{% endif %}" class="flex-fill text-decoration-none py-1.5 px-2 rounded-3 {% if step == 3 %}fw-bold text-white shadow-sm{% elif step > 3 %}fw-semibold{% else %}text-muted{% endif %}" style="{% if step == 3 %}background: #8b3d52;{% elif step > 3 %}background: #fdf2f5; color: #8b3d52;{% else %}background: #f8f5f6; pointer-events: none;{% endif %}">
+            3. Details
+          </a>
+          <span class="flex-fill py-1.5 px-2 rounded-3 {% if step == 4 %}fw-bold text-white shadow-sm{% else %}text-muted{% endif %}" style="{% if step == 4 %}background: #8b3d52;{% else %}background: #f8f5f6;{% endif %}">
+            4. Confirm
           </span>
         </div>
 
         <!-- Progress bar for mobile & desktop -->
         <div class="progress" style="height: 6px; border-radius: 6px; background-color: rgba(139, 79, 92, 0.12);">
           <div class="progress-bar" role="progressbar"
-               style="width: {% if step == 1 %}25%{% elif step == 2 %}50%{% elif step == 3 %}75%{% elif step == 4 %}100%{% else %}10%{% endif %}; background-color: var(--deep-rose, #8b4f5c);"
+               style="width: {% if step == 1 %}25%{% elif step == 2 %}50%{% elif step == 3 %}75%{% elif step == 4 %}100%{% else %}10%{% endif %}; background-color: var(--deep-rose, #8b4f5c); transition: width 0.3s ease;"
                aria-valuenow="{{ step|default:'1' }}" aria-valuemin="1" aria-valuemax="4"></div>
         </div>
       </div>
@@ -26,31 +42,22 @@
       <h1 class="h2 mb-3 fw-bold">{{ step_title|default:"Book an appointment" }}</h1>
 
       {% if step == 1 %}
-        <div class="alert alert-light border mb-4 p-3 rounded-3" style="background: #fdf5f8; border-color: #ead0da !important;">
-          <div class="fw-bold fs-6" style="color: #8b3d52;">📍 Branch Selection &amp; Salon Reminder Policy</div>
-          <div class="small text-muted mt-1">
-            Choose between our <strong>Plaridel Branch (Rocka Commercial Complex)</strong> and <strong>Retiro QC Branch (Amoranto, Quezon City)</strong>. No advance payment is required — we send reminders 4–5 hours before and on the day of your booking via email &amp; phone/SMS, with a 10–15 minute grace period.
-          </div>
-        </div>
-      {% endif %}
-
-      {% if step == 2 or step == 3 %}
         <div class="alert alert-warning border mb-4 p-3 rounded-3" style="background: #fff9ee; border-color: #f0d7a7 !important;">
           <div class="fw-bold fs-6 text-dark">✨ Friday–Sunday Peak Booking Policy</div>
           <div class="small text-muted mt-1">
-            On <strong>Friday, Saturday, and Sunday</strong>, online bookings prioritize <strong>package and major services above ₱300</strong>. Services <strong>₱300 and below</strong> are accepted online on Fri–Sun only when no other client is booked at that slot, or via walk-in when technicians are available.
+            On <strong>Friday, Saturday, and Sunday</strong>, online bookings prioritize <strong>package and major services above ₱300</strong>. Services <strong>₱300 and below</strong> are accepted online on Fri–Sun when no other client is booked at that slot, or via walk-in when technicians are available.
           </div>
         </div>
       {% endif %}
 
-      {% if step == 3 and total_duration %}
+      {% if step == 2 and total_duration %}
         <div class="alert alert-light border d-flex align-items-center justify-content-between mb-4 p-3 rounded-3 flex-wrap gap-2" style="background: rgba(139,79,92,0.05); border-color: var(--border)!important;">
           <div>
             <div class="fw-bold small text-uppercase" style="color: var(--deep-rose);">
-              <i class="bi bi-clock-history me-1"></i> Required Block of Time: {{ total_duration }} mins
+              <i class="bi bi-clock-history me-1"></i> Selected Services: {{ services|length }} treatment{{ services|length|pluralize }} · ₱{{ total_price|floatformat:2 }}
             </div>
             <div class="small text-secondary">
-              Salon services are scheduled based on technician time availability. No physical inventory is required.
+              Choose your preferred branch (Plaridel or Retiro QC), date, and available time slot below.
             </div>
           </div>
           <span class="badge rounded-pill px-3 py-2 text-white" style="background: var(--deep-rose); font-size: 0.85rem;">
@@ -59,8 +66,32 @@
         </div>
       {% endif %}
 
+      {% if step == 3 and not is_internal %}
+        {% if request.user.is_authenticated %}
+          <div class="alert alert-success border mb-4 p-3 rounded-4 d-flex align-items-center gap-3" style="background: #f0fdf4; border-color: #86efac !important;">
+            <i class="bi bi-patch-check-fill fs-3 text-success"></i>
+            <div>
+              <div class="fw-bold text-success">Signed in as {{ request.user.get_full_name|default:request.user.email }}</div>
+              <div class="small text-muted">Your details are pre-filled and your booking will be submitted immediately — no email verification code needed!</div>
+            </div>
+          </div>
+        {% else %}
+          <div class="p-3 mb-4 rounded-4 border d-flex flex-wrap align-items-center justify-content-between gap-3" style="background: #fdf5f8; border-color: #ead0da !important;">
+            <div>
+              <div class="fw-bold" style="color: #8b3d52;"><i class="bi bi-lightning-charge-fill me-1"></i> Faster Checkout with Google</div>
+              <div class="small text-muted">Auto-fill your details and skip email verification codes!</div>
+            </div>
+            <a href="/accounts/google/login/?process=login&next={{ request.path|urlencode }}" class="btn btn-light border shadow-sm fw-semibold d-inline-flex align-items-center gap-2 px-3 py-2">
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/><path fill="#34A853" d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.615 24 12.255 24z"/><path fill="#FBBC05" d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 000 10.76l3.98-3.09z"/><path fill="#EA4335" d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.64 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/></svg>
+              Continue with Google
+            </a>
+          </div>
+        {% endif %}
+      {% endif %}
+
       <form method="post" novalidate id="booking-form">
         {% csrf_token %}
+        {% if step == 1 %}<input type="hidden" name="wizard_step" value="services">{% endif %}
         {% if form.non_field_errors %}
           <div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>
         {% endif %}
@@ -88,7 +119,7 @@
               {{ field }}
               {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
-          {% elif field.name == 'services' and step == 2 and categories %}
+          {% elif field.name == 'services' and step == 1 and categories %}
             <div class="mb-4">
               <div class="d-flex align-items-center justify-content-between mb-2">
                 <label class="form-label fw-bold fs-5 mb-0" style="color: #2b181d;">
@@ -178,12 +209,12 @@
               <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
               {{ field }}
               {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-              {% if field.name == 'start_time' and step == 3 %}
+              {% if field.name == 'start_time' and step == 2 %}
                 <div class="form-text">Choose from the available technician slots below or enter a time.</div>
               {% endif %}
             </div>
 
-            {% if field.name == 'start_time' and step == 3 %}
+            {% if field.name == 'start_time' and step == 2 %}
               <div class="time-block-picker-section mb-4 p-4 rounded-4" style="background: #ffffff; border: 1.5px solid #ebd6de; box-shadow: 0 10px 30px rgba(72, 34, 45, 0.06);">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 pb-2 border-bottom">
                   <div>
@@ -200,7 +231,7 @@
                   <i class="bi bi-check-circle-fill fs-3 text-success"></i>
                   <div>
                     <strong class="d-block fs-6" id="selected-block-time">Selected: 10:00 AM</strong>
-                    <small class="text-muted" id="selected-block-details">Ready to proceed. Click "Review &amp; Confirm" below.</small>
+                    <small class="text-muted" id="selected-block-details">Ready to proceed. Click "Next: Your Details" below.</small>
                   </div>
                 </div>
 
@@ -216,9 +247,18 @@
           {% endif %}
         {% endfor %}
 
-        <!-- Form Submit & Security Notice -->
-        <div class="d-grid gap-2 pt-2">
-          <button class="btn btn-brand btn-lg py-2.5 fw-bold" type="submit">
+        <!-- Form Submit & Back Navigation -->
+        <div class="d-flex flex-wrap gap-2 pt-2">
+          {% if step == 2 %}
+            <a href="{% url 'bookings:index' %}" class="btn btn-outline-secondary btn-lg px-4">
+              <i class="bi bi-arrow-left me-1"></i> Back
+            </a>
+          {% elif step == 3 %}
+            <a href="{% url 'bookings:select_schedule' %}" class="btn btn-outline-secondary btn-lg px-4">
+              <i class="bi bi-arrow-left me-1"></i> Back
+            </a>
+          {% endif %}
+          <button class="btn btn-brand btn-lg py-2.5 fw-bold flex-grow-1" type="submit">
             {{ button_label|default:"Submit booking request" }} <i class="bi bi-arrow-right ms-1"></i>
           </button>
         </div>
@@ -242,7 +282,7 @@
   </div>
 </section>
 
-{% if step == 2 %}
+{% if step == 1 %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const checkboxes = document.querySelectorAll(".booking-service-cb");
@@ -296,7 +336,7 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 {% endif %}
 
-{% if step == 3 %}
+{% if step == 2 %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const dateInput = document.getElementById("id_appointment_date");

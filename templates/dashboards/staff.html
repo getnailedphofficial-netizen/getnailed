@@ -88,21 +88,40 @@
                   <span><i class="bi bi-person me-1"></i>{{ item.appointment.customer_name }}</span>
                   {% if item.appointment.branch %}
                     <span>&bull;</span>
-                    <span><i class="bi bi-geo-alt me-1"></i>{{ item.appointment.branch.name }}</span>
+                    <span><i class="bi bi-geo-alt me-1"></i>{{ item.appointment.get_branch_display }}</span>
                   {% endif %}
                 </div>
               </div>
             </div>
-            <div>
-              {% if item.status == 'COMPLETED' %}
+            <div class="d-flex align-items-center flex-wrap gap-2">
+              {% if item.appointment.status == 'COMPLETED' or item.status == 'COMPLETED' %}
                 <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-semibold">Completed</span>
-              {% elif item.status == 'IN_PROGRESS' %}
-                <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 rounded-pill fw-semibold">In Progress</span>
-              {% elif item.status == 'PENDING' %}
-                <span class="badge bg-secondary-subtle text-secondary border px-3 py-2 rounded-pill fw-semibold">Pending</span>
+              {% elif item.appointment.status == 'ONGOING' or item.status == 'ONGOING' or item.status == 'IN_PROGRESS' %}
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill fw-semibold">Ongoing</span>
+                <form method="post" action="{% url 'bookings:quick_status' reference=item.appointment.reference %}" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="status" value="COMPLETED">
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold">
+                    <i class="bi bi-check2-all me-1"></i>Mark Done
+                  </button>
+                </form>
+              {% elif item.appointment.status == 'APPROVED' or item.appointment.status == 'RESCHEDULED' %}
+                <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 rounded-pill fw-semibold">Ready</span>
+                <form method="post" action="{% url 'bookings:quick_status' reference=item.appointment.reference %}" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="status" value="ONGOING">
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold">
+                    <i class="bi bi-play-fill me-1"></i>Start Service
+                  </button>
+                </form>
               {% else %}
-                <span class="badge bg-light text-dark border px-3 py-2 rounded-pill fw-semibold">{{ item.get_status_display }}</span>
+                <span class="badge bg-light text-dark border px-3 py-2 rounded-pill fw-semibold">{{ item.appointment.get_status_display }}</span>
               {% endif %}
+              <a href="{% url 'bookings:detail' reference=item.appointment.reference %}" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1">
+                Details
+              </a>
             </div>
           </div>
         {% empty %}

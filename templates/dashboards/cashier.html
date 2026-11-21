@@ -93,8 +93,10 @@
                   {% endif %}
                 </td>
                 <td>
-                  {% if appointment.status == 'CONFIRMED' %}
-                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill">Confirmed</span>
+                  {% if appointment.status == 'APPROVED' or appointment.status == 'CONFIRMED' %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill">Approved</span>
+                  {% elif appointment.status == 'ONGOING' %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1 rounded-pill">Ongoing</span>
                   {% elif appointment.status == 'COMPLETED' %}
                     <span class="badge bg-info-subtle text-info border border-info-subtle px-2.5 py-1 rounded-pill">Completed</span>
                   {% elif appointment.status == 'PENDING' %}
@@ -104,9 +106,19 @@
                   {% endif %}
                 </td>
                 <td>
-                  <span class="small text-muted">{{ appointment.assigned_staff|default:"Unassigned" }}</span>
+                  <span class="small text-muted">{{ appointment.assigned_staff.get_full_name|default:appointment.assigned_staff|default:"Unassigned" }}</span>
                 </td>
-                <td class="text-end">
+                <td class="text-end text-nowrap">
+                  {% if appointment.status == 'PENDING' %}
+                    <form method="post" action="{% url 'bookings:quick_status' reference=appointment.reference %}" class="d-inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="status" value="APPROVED">
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <button type="submit" class="btn btn-sm btn-success rounded-pill px-2.5 py-1 fw-semibold me-1">
+                        <i class="bi bi-check-lg"></i> Approve
+                      </button>
+                    </form>
+                  {% endif %}
                   <a href="{% url 'pos:index' %}?appointment={{ appointment.pk }}" class="btn btn-sm btn-brand rounded-pill px-3 py-1" title="Checkout this appointment">
                     Checkout
                   </a>
