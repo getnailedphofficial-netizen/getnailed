@@ -331,3 +331,54 @@ class AuthenticationSecurityTests(TestCase):
             self.client.post(reverse("accounts:logout")),
             reverse("core:home"),
         )
+
+    def test_owner_can_update_account_access_and_new_social_users_default_to_customer(self):
+        from apps.accounts.adapters import CustomSocialAccountAdapter
+        from unittest.mock import MagicMock
+
+        # 1. Verify CustomSocialAccountAdapter.populate_user forces brand-new user to CUSTOMER
+        adapter = CustomSocialAccountAdapter()
+        dummy_sociallogin = MagicMock()
+        dummy_sociallogin.user = User(email="newgoogle@example.com")
+        populated = adapter.populate_user(
+            request=None,
+            sociallogin=dummy_sociallogin,
+            data={"email": "newgoogle@example.com", "first_name": "New", "last_name": "Client"},
+        )
+        self.assertEqual(populated.role, User.Role.CUSTOMER)
+
+        # 2. Verify Owner can change an account's role between CUSTOMER, STAFF, and CASHIER
+        owner = self.create_eligible_user("owner@example.com", User.Role.OWNER)
+        target = self.create_eligible_user("guest@example.com", User.Role.CUSTOMER)
+        self.client.force_login(owner)
+
+        # Promote CUSTOMER -> STAFF with specialty & permissions
+        resp = self.client.post(
+            reverse("accounts:update_account_access", kwargs={"user_id": target.pk}),
+            {
+                "role": User.Role.STAFF,
+                "is_active": "on",
+                "can_manage_bookings": "on",
+                "specialty": "Softgel & Nail Art Specialist",
+            },
+        )
+        self.assertRedirects(resp, reverse("accounts:invite_internal"))
+        target.refresh_from_db()
+        self.assertEqual(target.role, User.Role.STAFF)
+        self.assertTrue(target.can_manage_bookings)
+        self.assertTrue(hasattr(target, "staff_profile"))
+        self.assertEqual(target.staff_profile.specialty, "Softgel & Nail Art Specialist")
+
+        # Demote STAFF -> CUSTOMER removes StaffProfile and ensures Customer profile exists
+        resp2 = self.client.post(
+            reverse("accounts:update_account_access", kwargs={"user_id": target.pk}),
+            {
+                "role": User.Role.CUSTOMER,
+                "is_active": "on",
+            },
+        )
+        self.assertRedirects(resp2, reverse("accounts:invite_internal"))
+        target.refresh_from_db()
+        self.assertEqual(target.role, User.Role.CUSTOMER)
+        self.assertTrue(hasattr(target, "customer_profile"))
+

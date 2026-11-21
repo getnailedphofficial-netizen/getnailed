@@ -298,6 +298,10 @@ def login_lockouts(request):
 @owner_required
 @require_http_methods(["GET", "POST"])
 def invite_internal_account(request):
+    from django.db.models import Q
+    from apps.customers.models import Customer
+    from apps.services.models import StaffProfile
+
     form = InternalAccountInvitationForm(
         request.POST if request.method == "POST" else None,
         actor=request.user,
@@ -327,7 +331,127 @@ def invite_internal_account(request):
             )
         messages.success(request, "The account was created and an activation email was sent.")
         return redirect("accounts:invite_internal")
-    return render(request, "accounts/invite_internal.html", {"form": form})
+
+    search_q = (request.GET.get("q") or "").strip()
+    role_filter = (request.GET.get("role") or "").strip().upper()
+    accounts_qs = (
+        User.objects.select_related("staff_profile")
+        .prefetch_related("socialaccount_set")
+        .order_by("role", "first_name", "last_name", "email")
+    )
+    if search_q:
+        accounts_qs = accounts_qs.filter(
+            Q(email__icontains=search_q)
+            | Q(first_name__icontains=search_q)
+            | Q(last_name__icontains=search_q)
+            | Q(phone_number__icontains=search_q)
+        )
+    if role_filter in dict(User.Role.choices):
+        accounts_qs = accounts_qs.filter(role=role_filter)
+
+    return render(
+        request,
+        "accounts/invite_internal.html",
+        {
+            "form": form,
+            "accounts": accounts_qs,
+            "role_choices": User.Role.choices,
+            "search_q": search_q,
+            "role_filter": role_filter,
+        },
+    )
+
+
+@owner_required
+@require_http_methods(["POST"])
+def update_account_access(request, user_id):
+    from django.shortcuts import get_object_or_404
+    from apps.customers.models import Customer
+    from apps.services.models import StaffProfile
+
+    target_user = get_object_or_404(User, pk=user_id)
+    new_role = (request.POST.get("role") or "").strip().upper()
+    valid_roles = dict(User.Role.choices)
+    if new_role not in valid_roles:
+        messages.error(request, "Invalid role selected.")
+        return redirect("accounts:invite_internal")
+
+    if target_user.pk == request.user.pk and new_role != User.Role.OWNER:
+        messages.error(request, "You cannot remove Owner access from your own active account.")
+        return redirect("accounts:invite_internal")
+
+    is_active = request.POST.get("is_active") == "on"
+    if target_user.pk == request.user.pk and not is_active:
+        messages.error(request, "You cannot deactivate your own Owner account.")
+        return redirect("accounts:invite_internal")
+
+    can_use_pos = request.POST.get("can_use_pos") == "on" or new_role in (User.Role.OWNER, User.Role.CASHIER)
+    can_manage_bookings = request.POST.get("can_manage_bookings") == "on" or new_role in (User.Role.OWNER, User.Role.CASHIER)
+    can_manage_customers = request.POST.get("can_manage_customers") == "on" or new_role in (User.Role.OWNER, User.Role.CASHIER)
+    can_assign_services = request.POST.get("can_assign_services") == "on" or new_role in (User.Role.OWNER, User.Role.CASHIER)
+    specialty = (request.POST.get("specialty") or "").strip()
+
+    old_role = target_user.role
+    with transaction.atomic():
+        if new_role != User.Role.STAFF:
+            # Remove StaffProfile first before saving target_user so pre_save signal allows the role change
+            StaffProfile.objects.filter(user=target_user).delete()
+
+        target_user.role = new_role
+        target_user.is_active = is_active
+        target_user.is_active_staff_member = is_active and new_role in (
+            User.Role.OWNER,
+            User.Role.CASHIER,
+            User.Role.STAFF,
+        )
+        target_user.can_use_pos = can_use_pos
+        target_user.can_manage_bookings = can_manage_bookings
+        target_user.can_manage_customers = can_manage_customers
+        target_user.can_assign_services = can_assign_services
+        if is_active and not target_user.email_verified_at:
+            target_user.email_verified_at = timezone.now()
+        target_user.save()
+
+        if new_role == User.Role.STAFF:
+            sp, _ = StaffProfile.objects.get_or_create(
+                user=target_user,
+                defaults={
+                    "specialty": specialty or "Nail & Spa Specialist",
+                    "is_active": True,
+                },
+            )
+            if specialty and sp.specialty != specialty:
+                sp.specialty = specialty
+                sp.save(update_fields=["specialty"])
+        elif new_role == User.Role.CUSTOMER:
+            cust = Customer.objects.filter(user=target_user).first()
+            if cust is None and target_user.email:
+                cust = Customer.objects.filter(email__iexact=target_user.email).first()
+                if cust and cust.user_id is None:
+                    cust.user = target_user
+                    cust.save(update_fields=["user", "updated_at"])
+            if cust is None:
+                Customer.objects.create(
+                    user=target_user,
+                    first_name=target_user.first_name or "Valued",
+                    last_name=target_user.last_name or "Client",
+                    email=target_user.email,
+                    phone=target_user.phone_number or "",
+                )
+
+        if old_role != new_role:
+            record_security_event(
+                SecurityEvent.Action.ROLE_CHANGED,
+                request=request,
+                user=request.user,
+                target=target_user,
+            )
+
+    messages.success(
+        request,
+        f"Updated access for {target_user.get_full_name() or target_user.email} → {target_user.get_role_display()}.",
+    )
+    return redirect("accounts:invite_internal")
 
 
 def _activation_unavailable(request, activation=None):

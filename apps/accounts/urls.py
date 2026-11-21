@@ -14,6 +14,7 @@ from .views import (
     login_lockouts,
     logout_all_devices,
     mfa_configuration,
+    update_account_access,
 )
 
 app_name = "accounts"
@@ -23,6 +24,7 @@ urlpatterns = [
     path("logout-all/", logout_all_devices, name="logout_all_devices"),
     path("password-change/", SecurePasswordChangeView.as_view(), name="password_change"),
     path("internal/invite/", invite_internal_account, name="invite_internal"),
+    path("internal/accounts/<int:user_id>/access/", update_account_access, name="update_account_access"),
     path("internal/mfa-configuration/", mfa_configuration, name="mfa_configuration"),
     path("internal/login-lockouts/", login_lockouts, name="login_lockouts"),
     path("activate/<uuid:public_id>/set-password/", activation_password, name="activation_password"),

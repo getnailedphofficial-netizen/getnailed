@@ -1,22 +1,135 @@
 {% extends 'base.html' %}
 {% block title %}Create Internal Account | {{ BRAND_NAME }}{% endblock %}
 {% block content %}
-<div class="page-heading">
-  <div><div class="eyebrow">OWNER ACCESS</div><h2 class="mb-0">Create internal account</h2></div>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div>
+    <div class="eyebrow">OWNER ACCESS &amp; ROLE CONTROL</div>
+    <h2 class="mb-1">Account Access &amp; Staff Permissions</h2>
+    <p class="text-muted mb-0">Change how any account accesses your website (Customer, Staff, Cashier, or Owner), toggle operational permissions, or invite new internal staff.</p>
+  </div>
 </div>
-<div class="content-card" style="max-width: 720px;">
-  <p class="text-muted">The new cashier or staff member will receive a time-limited activation link and create their own password.</p>
-  <form method="post" novalidate>
-    {% csrf_token %}
-    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-    {% for field in form %}
-      <div class="mb-3">
-        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-        {{ field }}
-        {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+
+<div class="row g-4">
+  <!-- Left Column: Manage Existing Accounts Access & Roles -->
+  <div class="col-xl-8">
+    <div class="content-card p-4">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+          <h3 class="h5 fw-bold mb-1">All Website Accounts ({{ accounts|length }})</h3>
+          <p class="text-muted small mb-0">New Google sign-ins default to <strong>Customer</strong>. You can promote or change any account's role and permissions below.</p>
+        </div>
+        <form method="get" class="d-flex flex-wrap gap-2">
+          <select name="role" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+            <option value="">All Roles</option>
+            {% for role_val, role_label in role_choices %}
+              <option value="{{ role_val }}" {% if role_filter == role_val %}selected{% endif %}>{{ role_label }}</option>
+            {% endfor %}
+          </select>
+          <div class="input-group input-group-sm" style="width: 240px;">
+            <input type="text" name="q" value="{{ search_q }}" class="form-control" placeholder="Search name or email...">
+            <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-search"></i></button>
+          </div>
+          {% if search_q or role_filter %}
+            <a href="{% url 'accounts:invite_internal' %}" class="btn btn-outline-secondary btn-sm">Clear</a>
+          {% endif %}
+        </form>
       </div>
-    {% endfor %}
-    <button class="btn btn-brand" type="submit">Create and send activation</button>
-  </form>
+
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Role / Website Access</th>
+              <th>Permissions &amp; Specialty</th>
+              <th>Status</th>
+              <th class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for acct in accounts %}
+              <tr>
+                <form method="post" action="{% url 'accounts:update_account_access' acct.pk %}">
+                  {% csrf_token %}
+                  <td>
+                    <div class="fw-bold text-dark">{{ acct.get_full_name|default:acct.email }}</div>
+                    <div class="small text-muted">{{ acct.email }}</div>
+                    {% if acct.socialaccount_set.exists %}
+                      <span class="badge bg-light text-dark border mt-1"><i class="bi bi-google text-danger me-1"></i>Google Connected</span>
+                    {% endif %}
+                  </td>
+                  <td style="min-width: 170px;">
+                    <select name="role" class="form-select form-select-sm fw-semibold" {% if acct.pk == request.user.pk %}title="Your current Owner account"{% endif %}>
+                      {% for role_val, role_label in role_choices %}
+                        <option value="{{ role_val }}" {% if acct.role == role_val %}selected{% endif %}>{{ role_label }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                  <td style="min-width: 240px;">
+                    <div class="d-flex flex-wrap gap-2 mb-1">
+                      <label class="form-check form-check-inline mb-0 small">
+                        <input class="form-check-input" type="checkbox" name="can_use_pos" {% if acct.can_use_pos or acct.is_owner or acct.is_cashier %}checked{% endif %}>
+                        <span class="form-check-label">POS</span>
+                      </label>
+                      <label class="form-check form-check-inline mb-0 small">
+                        <input class="form-check-input" type="checkbox" name="can_manage_bookings" {% if acct.can_manage_bookings or acct.is_owner or acct.is_cashier %}checked{% endif %}>
+                        <span class="form-check-label">Bookings</span>
+                      </label>
+                      <label class="form-check form-check-inline mb-0 small">
+                        <input class="form-check-input" type="checkbox" name="can_manage_customers" {% if acct.can_manage_customers or acct.is_owner or acct.is_cashier %}checked{% endif %}>
+                        <span class="form-check-label">Customers</span>
+                      </label>
+                      <label class="form-check form-check-inline mb-0 small">
+                        <input class="form-check-input" type="checkbox" name="can_assign_services" {% if acct.can_assign_services or acct.is_owner or acct.is_cashier %}checked{% endif %}>
+                        <span class="form-check-label">Assign Staff</span>
+                      </label>
+                    </div>
+                    <input type="text" name="specialty" value="{{ acct.staff_profile.specialty|default:'' }}" class="form-control form-control-sm mt-1" placeholder="Staff specialty (if Staff role)">
+                  </td>
+                  <td>
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" name="is_active" id="activeSwitch{{ acct.pk }}" {% if acct.is_active %}checked{% endif %}>
+                      <label class="form-check-label small fw-semibold" for="activeSwitch{{ acct.pk }}">
+                        {% if acct.is_active %}<span class="text-success">Active</span>{% else %}<span class="text-danger">Inactive</span>{% endif %}
+                      </label>
+                    </div>
+                  </td>
+                  <td class="text-end">
+                    <button type="submit" class="btn btn-brand btn-sm">
+                      <i class="bi bi-check2-circle me-1"></i>Save Access
+                    </button>
+                  </td>
+                </form>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5" class="text-center text-muted py-4">No matching accounts found.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Create / Invite New Internal Account -->
+  <div class="col-xl-4">
+    <div class="content-card p-4">
+      <h3 class="h5 fw-bold mb-2">Create internal account</h3>
+      <p class="text-muted small mb-3">The new cashier or staff member will receive a time-limited activation link and create their own password, or they can sign in with Google using the same email.</p>
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        {% for field in form %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        <button class="btn btn-brand w-100" type="submit">Create and send activation</button>
+      </form>
+    </div>
+  </div>
 </div>
 {% endblock %}

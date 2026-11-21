@@ -121,7 +121,9 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
 
     def populate_user(self, request, sociallogin, data):
         user = super().populate_user(request, sociallogin, data)
-        if not getattr(user, "role", None):
+        # All brand-new Google OAuth signups must default to CUSTOMER (never STAFF)
+        # unless already linked to an existing User record in pre_social_login.
+        if not user.pk:
             user.role = user.Role.CUSTOMER
         user.is_active = True
         user.email_verified_at = timezone.now()
@@ -141,7 +143,13 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         )
 
     def save_user(self, request, sociallogin, form=None):
+        is_new_user = not bool(getattr(sociallogin.user, "pk", None))
+        if is_new_user:
+            sociallogin.user.role = sociallogin.user.Role.CUSTOMER
         user = super().save_user(request, sociallogin, form=form)
+        if is_new_user and user.role != user.Role.CUSTOMER:
+            user.role = user.Role.CUSTOMER
+            user.save(update_fields=["role"])
         if getattr(user, "role", None) == user.Role.CUSTOMER:
             from apps.customers.models import Customer
             data = sociallogin.account.extra_data or {}
