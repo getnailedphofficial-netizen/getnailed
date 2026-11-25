@@ -90,22 +90,6 @@ class Command(BaseCommand):
             full_grid = im.crop((0, 0, 1020, 768)).resize((960, 720), Image.Resampling.LANCZOS)
             full_grid.save(gallery_dir / "nail-8.jpg", quality=92)
 
-        # Copy and orient the loyalty card & business card if present in scratch
-        scratch_dir = Path(
-            r"C:\Users\Chibi\.gemini\antigravity\brain\c9c0bd86-b13d-46ac-9b83-eccf29294a31\scratch\data_adn_stuffs"
-        )
-        loyalty_src = scratch_dir / "145022.png"
-        if loyalty_src.exists():
-            l_im = Image.open(loyalty_src).convert("RGB")
-            # Rotate 90 degrees clockwise so the loyalty card is upright
-            l_upright = l_im.rotate(-90, expand=True)
-            l_upright.save(gallery_dir / "loyalty-card.jpg", quality=90)
-
-        biz_src = scratch_dir / "145023.png"
-        if biz_src.exists():
-            b_im = Image.open(biz_src).convert("RGB")
-            b_im.save(gallery_dir / "business-card.jpg", quality=90)
-
     def _seed_staff_and_roles(self):
         default_pw = "GetNailed2026!"
         now = timezone.now()
