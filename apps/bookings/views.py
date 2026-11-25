@@ -118,6 +118,9 @@ def index(request):
             return redirect(f"{reverse('bookings:verify')}?reference={booking.reference}")
         return render(request, "bookings/public_booking.html", {"form": legacy_form})
 
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('accounts:login')}?next={request.get_full_path()}")
+
     is_internal = _is_internal_booking_user(request.user)
 
     # Preserve backward compatibility if a legacy caller POSTs contact fields directly to index.
@@ -183,6 +186,8 @@ def index(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def select_services(request):
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('accounts:login')}?next={request.get_full_path()}")
     data = dict(_wizard_data(request))
     if request.method == "GET" and "contact" not in data:
         return redirect("bookings:index")
@@ -219,6 +224,8 @@ def select_services(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def select_schedule(request):
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('accounts:login')}?next={request.get_full_path()}")
     data = dict(_wizard_data(request))
     if not data.get("service_ids"):
         return redirect("bookings:index")
@@ -277,6 +284,8 @@ def select_schedule(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def contact_details(request):
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('accounts:login')}?next={request.get_full_path()}")
     data = dict(_wizard_data(request))
     if not data.get("service_ids") or "schedule" not in data:
         return redirect("bookings:index")
@@ -375,6 +384,8 @@ def api_available_slots(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def review(request):
+    if not request.user.is_authenticated:
+        return redirect(f"{reverse('accounts:login')}?next={request.get_full_path()}")
     data = _wizard_data(request)
     if "contact" not in data or not data.get("service_ids") or "schedule" not in data:
         return redirect("bookings:index")

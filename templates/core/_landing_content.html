@@ -27,9 +27,15 @@
 
         <!-- Action Buttons -->
         <div class="d-flex flex-wrap align-items-center gap-3">
-          <a href="{% url 'bookings:index' %}" class="btn btn-light btn-lg px-4 py-3 fw-bold rounded-pill shadow-sm" style="font-size: 1rem; letter-spacing: 0.04em;">
-            BOOK AN APPOINTMENT &rarr;
-          </a>
+          {% if request.user.is_authenticated %}
+            <a href="{% url 'bookings:index' %}" class="btn btn-light btn-lg px-4 py-3 fw-bold rounded-pill shadow-sm" style="font-size: 1rem; letter-spacing: 0.04em;">
+              BOOK AN APPOINTMENT &rarr;
+            </a>
+          {% else %}
+            <a href="{% url 'accounts:login' %}?next={% url 'bookings:index' %}" class="btn btn-light btn-lg px-4 py-3 fw-bold rounded-pill shadow-sm" style="font-size: 1rem; letter-spacing: 0.04em;">
+              BOOK AN APPOINTMENT &rarr;
+            </a>
+          {% endif %}
           <a href="#branches" class="btn btn-outline-light btn-lg px-4 py-3 fw-bold rounded-pill" style="font-size: 1rem; letter-spacing: 0.04em;">
             FIND A LOCATION &rarr;
           </a>
@@ -45,35 +51,39 @@
         <span class="text-uppercase fw-bold text-muted small" style="letter-spacing: 0.12em;">STUDIO LOOKBOOK</span>
         <h2 class="h3 fw-bold mb-0" style="color: #241318;">Featured Nail Artistry</h2>
       </div>
-      <a href="{% url 'bookings:index' %}" class="btn btn-outline-dark btn-sm rounded-pill px-3">Book Service &rarr;</a>
+      {% if request.user.is_authenticated %}
+        <a href="{% url 'bookings:index' %}" class="btn btn-outline-dark btn-sm rounded-pill px-3">Book Service &rarr;</a>
+      {% else %}
+        <a href="{% url 'accounts:login' %}?next={% url 'bookings:index' %}" class="btn btn-outline-dark btn-sm rounded-pill px-3">Book Service &rarr;</a>
+      {% endif %}
     </div>
 
     <!-- Featured Large Visual Grid (All unique, non-duplicate photographs) -->
     <div class="row g-3" id="gallery">
       <div class="col-lg-6">
-        <a href="{% url 'bookings:index' %}" class="d-block overflow-hidden shadow" style="border-radius: 26px;">
+        <a href="{% if request.user.is_authenticated %}{% url 'bookings:index' %}{% else %}{% url 'accounts:login' %}?next={% url 'bookings:index' %}{% endif %}" class="d-block overflow-hidden shadow" style="border-radius: 26px;">
           <img src="{% static 'images/gallery/nail-4.jpg' %}" alt="Burgundy & Gold Foil Gel Art" class="img-fluid w-100 object-fit-cover" style="height: 430px;">
         </a>
       </div>
       <div class="col-lg-6">
         <div class="row g-3">
           <div class="col-6">
-            <a href="{% url 'bookings:index' %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
+            <a href="{% if request.user.is_authenticated %}{% url 'bookings:index' %}{% else %}{% url 'accounts:login' %}?next={% url 'bookings:index' %}{% endif %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
               <img src="{% static 'images/gallery/nail-1.jpg' %}" alt="Starlight Cat Eye Gel" class="img-fluid w-100 object-fit-cover" style="height: 207px;">
             </a>
           </div>
           <div class="col-6">
-            <a href="{% url 'bookings:index' %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
+            <a href="{% if request.user.is_authenticated %}{% url 'bookings:index' %}{% else %}{% url 'accounts:login' %}?next={% url 'bookings:index' %}{% endif %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
               <img src="{% static 'images/gallery/nail-2.jpg' %}" alt="Champagne Cat Eye" class="img-fluid w-100 object-fit-cover" style="height: 207px;">
             </a>
           </div>
           <div class="col-6">
-            <a href="{% url 'bookings:index' %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
+            <a href="{% if request.user.is_authenticated %}{% url 'bookings:index' %}{% else %}{% url 'accounts:login' %}?next={% url 'bookings:index' %}{% endif %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
               <img src="{% static 'images/gallery/nail-3.jpg' %}" alt="3D Bridal Floral Nail Art" class="img-fluid w-100 object-fit-cover" style="height: 207px;">
             </a>
           </div>
           <div class="col-6">
-            <a href="{% url 'bookings:index' %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
+            <a href="{% if request.user.is_authenticated %}{% url 'bookings:index' %}{% else %}{% url 'accounts:login' %}?next={% url 'bookings:index' %}{% endif %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
               <img src="{% static 'images/gallery/nail-7.jpg' %}" alt="Softgel Blossom Set" class="img-fluid w-100 object-fit-cover" style="height: 207px;">
             </a>
           </div>
@@ -82,17 +92,17 @@
 
       <!-- Distinct Studio Showcase (Gel Polish, Classic Care & Lounge) -->
       <div class="col-md-4">
-        <a href="{% url 'bookings:index' %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
+        <a href="{% if request.user.is_authenticated %}{% url 'bookings:index' %}{% else %}{% url 'accounts:login' %}?next={% url 'bookings:index' %}{% endif %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
           <img src="{% static 'images/gallery/nail-5.jpg' %}" alt="Glossy Red Gel Polish" class="img-fluid w-100 object-fit-cover" style="height: 230px;">
         </a>
       </div>
       <div class="col-md-4">
-        <a href="{% url 'bookings:index' %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
+        <a href="{% if request.user.is_authenticated %}{% url 'bookings:index' %}{% else %}{% url 'accounts:login' %}?next={% url 'bookings:index' %}{% endif %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
           <img src="{% static 'images/gallery/nail-6.jpg' %}" alt="Clean Nude Manicure & Pedicure" class="img-fluid w-100 object-fit-cover" style="height: 230px;">
         </a>
       </div>
       <div class="col-md-4">
-        <a href="{% url 'bookings:index' %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
+        <a href="{% if request.user.is_authenticated %}{% url 'bookings:index' %}{% else %}{% url 'accounts:login' %}?next={% url 'bookings:index' %}{% endif %}" class="d-block overflow-hidden shadow-sm" style="border-radius: 22px;">
           <img src="{% static 'images/gallery/nail-8.jpg' %}" alt="Studio Nail Art & Lounge" class="img-fluid w-100 object-fit-cover" style="height: 230px;">
         </a>
       </div>

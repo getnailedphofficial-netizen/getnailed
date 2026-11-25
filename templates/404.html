@@ -23,7 +23,7 @@
           </a>
         {% endif %}
         <a href="{% url 'core:home' %}" class="btn btn-outline-dark btn-lg px-4 rounded-pill">Home Page</a>
-        <a href="{% url 'bookings:index' %}" class="btn btn-outline-dark btn-lg px-4 rounded-pill">Book Appointment</a>
+        <a href="{% if request.user.is_authenticated %}{% url 'bookings:index' %}{% else %}{% url 'accounts:login' %}?next={% url 'bookings:index' %}{% endif %}" class="btn btn-outline-dark btn-lg px-4 rounded-pill">Book Appointment</a>
       </div>
     </div>
   </div>

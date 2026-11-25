@@ -193,6 +193,8 @@ class AppointmentWorkflowTests(TestCase):
             )
 
     def test_public_wizard_creates_an_appointment(self):
+        user = self.create_user("web@example.com", User.Role.CUSTOMER)
+        self.client.force_login(user)
         response = self.client.post(
             reverse("bookings:index"),
             {
@@ -622,14 +624,14 @@ class AppointmentWorkflowTests(TestCase):
         self.assertEqual(chat_res.status_code, 200)
         self.assertIn("Plaridel Branch", chat_res.json()["reply"])
 
-    def test_guest_browser_can_browse_services_without_login_wall(self):
+    def test_guest_browser_is_redirected_to_login_wall(self):
         response = self.client.get(
             reverse("bookings:index"),
             HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Choose Your Services")
-        self.assertContains(response, self.service.name)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response["Location"])
+        self.assertIn(reverse("bookings:index"), response["Location"])
 
     def test_service_first_wizard_and_verified_customer_skips_email_otp(self):
         customer_user = self.create_user("client@example.com", User.Role.CUSTOMER)
